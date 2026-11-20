@@ -350,6 +350,10 @@ mark { background:var(--paper-tint); color:inherit; box-shadow:inset 0 -1.5px 0 
 .tip-t { margin-top:5px; font:400 11.5px/1.4 var(--font-sans); color:var(--ink); }
 .tip-f { margin-top:6px; font:400 9px/1.3 var(--font-mono); color:var(--ink-subtle); }
 
+.ctx { margin-top:9px; display:flex; gap:6px; flex-wrap:wrap; }
+.ctx span { display:inline-flex; align-items:baseline; gap:6px; padding:4px 8px; border-radius:4px; background:var(--surface); border:.5px solid var(--line); font:400 11.5px/1.2 var(--font-sans); color:var(--ink); white-space:nowrap; }
+.ctx small { font:400 9px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
+
 /* Controls (as intake) */
 .hint { position:fixed; right:max(16px, env(safe-area-inset-right, 0px)); bottom:16px; z-index:100; display:flex; align-items:center; gap:8px; height:32px; max-width:320px; box-sizing:border-box; padding:0 14px 0 5px; overflow:hidden; white-space:nowrap; border-radius:16px; background:var(--surface); border:.5px solid var(--line-strong); color:var(--ink-muted); font:400 11px/1 var(--font-mono); cursor:pointer; transition:max-width .45s cubic-bezier(.2,.7,.2,1), padding .45s cubic-bezier(.2,.7,.2,1); }
 .hint-icon { flex:none; width:21px; text-align:center; font-size:15px; line-height:1; font-variant-emoji:text; color:var(--ink); }
@@ -426,7 +430,12 @@ body.rec .hint { display:none; }
         <div>
           <div class="eyebrow">Liftoff · GTM playbook</div>
           <h1>Sales funnel · week 12</h1>
+          <div class="ctx"><span><small>Segment</small>M&amp;E subcontractors</span><span><small>GTM play</small>Founder-led social selling</span><span><small>Week</small>12 · 8 Feb 2027</span></div>
         </div>
+        <button class="btn-go" id="btnGo4" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v2.8h-2.8"/></svg>
+          <span id="btnGo4Label">Run funnel review</span>
+        </button>
       </header>
 
       <div class="pin" id="pin4">
@@ -1004,7 +1013,12 @@ function fillFunnel() {
   return Promise.all(FUNNEL.map((f, k) => { $("fn-" + k).style.height = Math.max(8, lg[k] / mx * 52) + "px"; return countTo($("fnn-" + k), f[1], 0, "", "", 1100); }));
 }
 async function beatBoard() {
-  await sleep(400);
+  const btn = $("btnGo4"), lbl = t => $("btnGo4Label").textContent = t;
+  placeCursor(600, 470); await showCursor(); await sleep(300);
+  await moveTo(btn, .5, .55); await click(btn);
+  lbl("Reading inputs…");
+  await moveTo(btn, .5, 2.6, 700);
+  cursor.style.opacity = 0;
   $("pin4").classList.add("on"); $("panel4").classList.add("open"); await sleep(420);
   ticker({ t:"Loading inputs: 3 automated feeds, 3 learned from meetings, reviews and investor talks" }, "ticker4");
   const rings = [];
@@ -1014,6 +1028,7 @@ async function beatBoard() {
   await sleep(500);
   await scrollToY(offsetIn($("pin4")), 800);
   const T = it => ticker(it, "ticker4");
+  lbl("Analysing…");
   // the funnel
   T(THINK4[0]); $("funnelWrap").classList.add("show"); await sleep(300);
   await fillFunnel(); await sleep(1100);
@@ -1038,6 +1053,7 @@ async function beatBoard() {
   T(THINK4[7]); await tween({ bandP:1 }, 1500, lin); await sleep(1100);
   T(THINK4[8]); await tween({ bandF:1 }, 2200, lin); await sleep(2400);
   // results back up: figures, verdict, the next playbook
+  btn.classList.add("done"); lbl("Week 12 reviewed");
   // the funnel folds away (its numbers live on in the figures), so the graph stays in view under the results
   $("funnelFold").classList.remove("open"); await sleep(500);
   $("tickerFold4").classList.remove("open"); $("summaryFold4").classList.add("open");
@@ -1112,6 +1128,7 @@ addEventListener("keydown", e => {
 $("hint").addEventListener("click", play);
 setTimeout(() => $("hint").classList.add("mini"), 2500);
 $("btnGo").addEventListener("click", () => { if (state.phase === "initial") play(); });
+$("btnGo4").addEventListener("click", () => { if (state.phase === "board" && !state.running) play(); });
 
 if (flags.has("board")) { goBoard(true); state.phase = "board"; }
 else if (flags.has("reviewed")) reviewedInstant();
