@@ -69,6 +69,10 @@ a.step { text-decoration:none; cursor:pointer; transition:background-color .2s, 
 a.step:not(.on):hover { background:var(--surface); color:var(--ink-muted); }
 a.step:focus-visible { outline:1px solid var(--blue-light); outline-offset:-1px; }
 .step.off { opacity:.55; }
+.step.next { color:var(--ink); border-color:var(--green); animation:nextpulse 1.6s ease-in-out infinite; }
+.step.next .n { color:var(--green); }
+.step.off.next { opacity:1; }
+@keyframes nextpulse { 0%,100% { box-shadow:0 0 0 0 rgba(62,191,128,.55); background:rgba(62,191,128,.06); } 50% { box-shadow:0 0 0 6px rgba(62,191,128,0); background:rgba(62,191,128,.18); } }
 .co { margin-top:auto; display:flex; flex-direction:column; gap:5px; padding:12px; border-radius:6px; background:var(--surface); border:.5px solid var(--line); }
 .label { font:400 10px/1.2 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
 .co-name { font:500 15px/1.2 var(--font-display); }
@@ -259,7 +263,7 @@ body.rec .hint { display:none; }
       <div class="co-name"><span class="hush">Lintel</span></div>
       <div class="co-desc">Site records for construction subcontractors. Pre-seed, UK.</div>
     </div>
-    <div class="foot">Demo run. Names and numbers blurred.</div>
+    <div class="foot">Partial demo run. Names and numbers blurred.</div>
   </aside>
 
   <main class="main">
@@ -738,8 +742,8 @@ const PAGE = "intake.html";
 const STEPS = [
   ["Intake", "intake.html", true],
   ["Segments", "segments.html", true],
-  ["Voice clone", "voice-clone.html", false],
-  ["Posts to meetings", "posts-to-meetings.html", false]
+  ["GTM feedback loop", "gtm-loop.html", true],
+  ["Sales funnel", "gtm-loop.html", false]
 ];
 $("steps").innerHTML = STEPS.map(([name, file, built], k) => built
   ? `<a class="step${file === PAGE ? " on" : ""}" href="${file}"${file === PAGE ? ' aria-current="page"' : ""}><span class="n">${k+1}</span>${name}</a>`
@@ -763,6 +767,7 @@ async function play() {
     if (state.phase === "initial") { await beat1(); await sleep(1200); }
     if (state.phase === "b1done") await beat2();
     cursor.style.opacity = 0;
+    { const i = STEPS.findIndex(s => s[1] === PAGE), nx = $("steps").children[i + 1]; if (nx) nx.classList.add("next"); }   // ended: the next screencast's tab pulses
     document.body.classList.add("blur-answers");    // ended: every blur on, the still frame shows only shape
   } finally { state.running = false; }
 }
