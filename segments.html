@@ -190,6 +190,11 @@ h1 { font:500 28px/1.2 var(--font-display); margin:8px 0 0; text-wrap:balance; }
 .sc.pop { animation:pop .4s ease-out; }
 @keyframes pop { 0% { transform:scale(1); } 40% { transform:scale(1.06); } 100% { transform:scale(1); } }
 .sc.hot { box-shadow:0 0 0 1px var(--blue-light); }
+/* score loading: the file-upload ring, in place of the value */
+.sc-ring { display:none; flex:none; width:12px; height:12px; margin:1px 0; }
+.sc-ring svg { display:block; width:12px; height:12px; transform:rotate(-90deg); }
+.sc-ring .t { stroke:var(--line); } .sc-ring .p { stroke:var(--blue-light); }
+.sc.loading .sc-ring { display:block; } .sc.loading .sc-v { display:none; }
 .sc-top { display:flex; justify-content:space-between; align-items:center; gap:4px; }
 .sc-l { font:400 7.5px/1.2 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-subtle); white-space:nowrap; }
 .sc-c { font:400 8.5px/1 var(--font-mono); color:var(--blue-light); font-variant-numeric:tabular-nums; }
@@ -564,7 +569,7 @@ function card(k) {
     <div class="c-row"><span class="st-l">Alternatives</span><span class="c-txt ans" data-f="alt">${emptyTxt}</span></div>
     <div class="c-row"><span class="st-l">Signals</span><span class="c-txt ans" data-f="sig">${emptyTxt}</span></div>
     <div class="c-scores">${SC_LABEL.map((l, j) => `<div class="sc" id="sc-${k}-${j}"><div class="sc-top"><span class="sc-l">${l}</span><span class="sc-c"></span></div>
-      <div class="sc-mid"><span class="sc-v">–</span><span class="pips">${"<i></i>".repeat(5)}</span></div><div class="sc-s"></div></div>`).join("")}</div>
+      <div class="sc-mid"><span class="sc-ring"><svg viewBox="0 0 20 20"><circle class="t" cx="10" cy="10" r="8" fill="none" stroke-width="2.4"/><circle class="p" cx="10" cy="10" r="8" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg></span><span class="sc-v">–</span><span class="pips">${"<i></i>".repeat(5)}</span></div><div class="sc-s"></div></div>`).join("")}</div>
     <div class="c-foot">
       <span class="c-ev"><span class="ev-l">Evidence</span> <b id="ev-${k}">0</b> ▸</span>
       <span class="c-bh"><span class="tag">Top pick</span>Beachhead <b id="bh-${k}">–</b>/20</span>
@@ -591,17 +596,46 @@ function materialize(k, instant) {
   g.outerHTML = card(k);
   if (!instant) $("card-" + k).classList.add("born");
 }
-/* card fields */
-function reveal(k, keys, instant) {
+/* Streams text in the way a model generates it: token-sized chunks (2 to 5 characters, with the
+   space before them) at uneven speed, now and then a short stall. [[...]] names arrive whole. */
+const rnd = (a, b) => a + Math.random() * (b - a);
+function tokens(t) {
+  const out = [];
+  for (const w of t.match(/\s*\S+|\s+/g) || []) {
+    let rest = w;
+    while (rest) { const n = rest.match(/^\s*/)[0].length + 2 + Math.floor(Math.random() * 4); out.push(rest.slice(0, n)); rest = rest.slice(n); }
+  }
+  return out;
+}
+async function typeOut(node, text) {
+  let html = ""; node.innerHTML = "";
+  for (const p of parts(text)) {
+    for (const tk of p.k ? [p.t] : tokens(p.t)) {
+      html += p.k ? `<span class="hush">${esc(tk)}</span>` : esc(tk);
+      node.innerHTML = html;
+      await sleep(Math.random() < .06 ? rnd(80, 200) : rnd(10, 35));
+    }
+  }
+}
+/* card fields: typed one after another while scanning, set at once for the start flags */
+async function reveal(k, keys, instant) {
   const s = SEG[k], el = $("card-" + k);
   for (const f of keys) {
     const node = el.querySelector(`[data-f="${f}"]`); if (!node) continue;
-    if (f === "conf") { node.className = "c-conf " + s.conf; node.textContent = s.conf; node.style.visibility = ""; }
-    else if (f === "chk") { node.className = "st-v small " + s.ck; node.textContent = s.chk; }
-    else if (f === "note") { node.style.display = ""; node.innerHTML = rich(s.note); }
-    else node.innerHTML = rich(s[f]);
-    if (!instant) { node.classList.remove("f-in"); void node.offsetWidth; node.classList.add("f-in"); }
+    let text = s[f];
+    if (f === "conf") { node.className = "c-conf " + s.conf; node.style.visibility = ""; }
+    else if (f === "chk") node.className = "st-v small " + s.ck;
+    else if (f === "note") node.style.display = "";
+    if (instant) node.innerHTML = rich(text); else await typeOut(node, text);
   }
+}
+/* A score cell loads like a file upload: the ring fills in uneven chunks, each after 15 to 45 ms, then the value lands. */
+async function loadScore(k, j) {
+  const el = $(`sc-${k}-${j}`), c = el.querySelector(".sc-ring .p"), L = 50.27;
+  el.classList.add("loading");
+  for (let p = 0; p < 1; ) { p = Math.min(1, p + rnd(.03, .14)); c.style.strokeDashoffset = L * (1 - p); await sleep(rnd(15, 45)); }
+  await sleep(rnd(40, 90));
+  setScore(k, j);
 }
 function setScore(k, j, instant) {
   const [v, o, c, src] = SEG[k].sc[j], el = $(`sc-${k}-${j}`);
@@ -753,7 +787,7 @@ async function beatScan() {
     await sleep(350);
     const s = SEG[k], per = s.scan.length;
     const ev = countUp($("ev-" + k), s.ev[0] + s.ev[1], per * 1100);
-    for (const it of s.scan) { ticker(it); reveal(k, it.f); await sleep(1050); }
+    for (const it of s.scan) { ticker(it); await Promise.all([reveal(k, it.f), sleep(1050)]); }
     await ev;
     el.classList.remove("active");
     $("scanned").textContent = ++state.scanned;
@@ -787,10 +821,9 @@ async function beatScore() {
     await scrollToCard(k, 600);
     const el = $("card-" + k); el.classList.add("active");
     const lines = SEG[k].score;
-    for (let j = 0; j < 4; j++) {
-      if (j < lines.length) { ticker(lines[j]); await sleep(700); }
-      setScore(k, j); await sleep(lines.length > 1 ? 260 : 200);
-    }
+    const loads = [0, 1, 2, 3].map(j => loadScore(k, j));   // all four start together, finish in random order
+    for (const l of lines) { ticker(l); await sleep(700); }
+    await Promise.all(loads);
     setBh(k); await sleep(260);
     el.classList.remove("active");
   }
