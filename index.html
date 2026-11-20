@@ -743,7 +743,7 @@ const STEPS = [
   ["Intake", "intake.html", true],
   ["Segments", "segments.html", true],
   ["GTM feedback loop", "gtm-loop.html", true],
-  ["Sales funnel", "gtm-loop.html", false]
+  ["Liftoff Board", "gtm-loop.html#board", true]
 ];
 $("steps").innerHTML = STEPS.map(([name, file, built], k) => built
   ? `<a class="step${file === PAGE ? " on" : ""}" href="${file}"${file === PAGE ? ' aria-current="page"' : ""}><span class="n">${k+1}</span>${name}</a>`
@@ -754,7 +754,8 @@ $("steps").addEventListener("click", e => {
   const file = a.getAttribute("href");
   if (file === PAGE) { restart(); return; }
   const keep = [...flags].filter(f => f !== "auto" && f !== "beat2").join("-");
-  location.href = file + (keep ? "#" + keep : "");
+  const [base, own] = file.split("#"), h = [own, keep].filter(Boolean).join("-");
+  location.href = base + (h ? "#" + h : "");
 });
 
 /* ---------- controls ---------- */

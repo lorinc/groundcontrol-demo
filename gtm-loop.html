@@ -5,12 +5,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
 <!--
-  Screencast 3 of 4: GTM feedback loop (content loop for one playbook). Scripted playback, recorded at 1920x1080.
-  Screen 4 (sales funnel) is designed in gtm-loop.md, not built; "Open funnel" does nothing yet.
+  Screencasts 3 and 4 of 4, one page: GTM feedback loop (content loop for one playbook), then Liftoff Board (sales funnel).
+  Screen 3 ends by clicking "Open funnel", which slides to screen 4; screen 4 plays on the next Space. Recorded at 1920x1080.
   Blur: names and numbers always; whole texts too while paused or after the end (SCOPE.md, "Show the system").
-  Keys: Space or Enter = play, and pause / resume while playing · 1 = restart · 2 = start reviewed (discuss next) · B = blur whole texts on / off
-  Hash flags (joined by "-"): rec = hide the key hint and edge padding, for recording · auto = play on load · reviewed = start with the weekly review done · answers = start with whole texts blurred
-  Example for OBS: gtm-loop.html#rec-auto
+  Keys: Space or Enter = play, and pause / resume while playing · 1 = restart · 2 = start reviewed (discuss next) · 3 = start on screen 4 · B = blur whole texts on / off
+  Hash flags (joined by "-"): rec = hide the key hint and edge padding, for recording · auto = play on load · reviewed = start with the weekly review done · board = start on screen 4 · answers = start with whole texts blurred
+  Example for OBS: gtm-loop.html#rec-auto (screen 3), gtm-loop.html#rec-board-auto (screen 4)
 -->
 <style>
 /* Layout: a fixed 960x540 app stage, scaled to the window; rail + one scrolling column: header, the inputs-and-thinking panel pinned on top as the summary header (figures, next week's post, cadence), then the ranking cards; paper drawer for the post conversation. */
@@ -282,6 +282,74 @@ mark { background:var(--paper-tint); color:inherit; box-shadow:inset 0 -1.5px 0 
 .ripple { position:absolute; z-index:49; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%; border:2px solid var(--blue-light); pointer-events:none; animation:rip .5s ease-out forwards; }
 @keyframes rip { from { transform:scale(.3); opacity:1; } to { transform:scale(1.4); opacity:0; } }
 
+/* ---------- Screen 4: Liftoff Board. Slides in from the right; same column, pinned panel, ticker. ---------- */
+.main { overflow:hidden; }
+#scroller, #scroller4 { transition:transform .75s cubic-bezier(.65,0,.35,1); }
+#scroller4 { position:absolute; inset:0; transform:translateX(102%); }
+.main.s4 #scroller { transform:translateX(-102%); }
+.main.s4 #scroller4 { transform:none; }
+.main.instant #scroller, .main.instant #scroller4 { transition:none; }
+.stats.s4 { grid-template-columns:repeat(4, minmax(0,1fr)); }
+.stat.warn { border-top-color:var(--orange); }
+.stat.warn .stat-num { color:var(--orange); }
+.verdict { margin-top:10px; display:flex; gap:12px; align-items:baseline; padding:8px 14px; border-radius:6px; background:var(--surface-raised); border:1px solid var(--orange); font:500 12.5px/1.4 var(--font-display); color:var(--ink); min-height:36px; box-sizing:border-box; }
+.verdict small { flex:none; font:400 10px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--orange); }
+.rec { margin-top:8px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:9px 12px 9px 14px; border-radius:6px; background:var(--ground); border:.5px solid var(--green); transition:box-shadow .4s; }
+.rec.glow { box-shadow:0 0 0 1px var(--green), 0 0 24px rgba(62,191,128,.2); }
+.rec .label { color:var(--green); }
+.rec-t { margin-top:4px; font:500 14px/1.2 var(--font-display); }
+.rec-txt { margin-top:3px; font:400 11.5px/1.35 var(--font-sans); color:var(--ink-muted); }
+.rec .btn-go { padding:9px 12px; font-size:12px; }
+.later { opacity:0; transform:translateY(8px); transition:opacity .5s, transform .5s; }
+.later.show { opacity:1; transform:none; }
+.funnel { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:2px; }
+.fn-bar { height:52px; display:flex; align-items:center; }
+.fn-bar i { display:block; width:100%; height:0; background:linear-gradient(90deg, var(--blue), #3d74d6); transition:height .8s cubic-bezier(.2,.7,.2,1); }
+.fn:first-child .fn-bar i { border-radius:4px 0 0 4px; }
+.fn:last-child .fn-bar i { border-radius:0 4px 4px 0; background:linear-gradient(90deg, #3d74d6, var(--green)); }
+.fn-n { margin-top:6px; font:500 17px/1 var(--font-display); font-variant-numeric:tabular-nums; }
+.fn-l { margin-top:3px; font:400 10px/1.2 var(--font-mono); color:var(--ink-subtle); }
+.legend { display:flex; gap:14px; font:400 10px/1 var(--font-mono); color:var(--ink-muted); }
+.legend span { display:inline-flex; align-items:center; gap:6px; opacity:0; transition:opacity .4s; }
+.legend span.on { opacity:1; }
+.legend i { width:14px; height:2px; background:currentColor; }
+.lg-p { color:var(--blue-light); } .lg-f { color:var(--orange); } .lg-l { color:var(--green); }
+.lg-l i { background:repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); }
+.lg-p b, .lg-f b, .lg-l b { font-weight:400; color:var(--ink-muted); }
+.graph { position:relative; background:var(--surface); border:.5px solid var(--line); border-radius:6px; padding:6px 8px 2px; }
+.graph svg { display:block; width:100%; height:auto; }
+.g-ax { font:400 9px var(--font-mono); fill:var(--ink-subtle); }
+.g-grid { stroke:var(--line); stroke-width:.5; }
+.g-base { stroke:var(--line-strong); stroke-width:1; }
+.g-p, .g-f { fill:none; stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round; }
+.g-p { stroke:var(--blue-light); } .g-f { stroke:var(--orange); }
+.g-dot-p { fill:var(--blue-light); } .g-dot-f { fill:var(--orange); }
+.g-win { fill:rgba(62,191,128,.1); }
+.g-wedge { stroke:rgba(62,191,128,.55); stroke-width:1; stroke-dasharray:3 3; }
+.g-wl { font:500 11px var(--font-display); fill:var(--green); }
+.g-ws { font:400 9px var(--font-mono); fill:var(--ink-subtle); }
+.g-lift { stroke:var(--green); stroke-width:1.5; stroke-dasharray:6 4; }
+.g-ll { font:500 10.5px var(--font-display); fill:var(--green); }
+.g-bp { fill:rgba(142,180,255,.17); } .g-bf { fill:rgba(242,163,59,.2); }
+.g-bp-m, .g-bf-m { fill:none; stroke-width:1.3; stroke-dasharray:3 3; }
+.g-bp-m { stroke:var(--blue-light); } .g-bf-m { stroke:var(--orange); }
+.g-pl { font:400 9.5px var(--font-mono); }
+.g-pl.p { fill:var(--blue-light); } .g-pl.f { fill:var(--orange); }
+.g-cash { stroke:var(--ink); stroke-width:2; }
+.g-cl { font:500 10.5px var(--font-display); fill:var(--ink); }
+.g-cs { font:400 9px var(--font-mono); fill:var(--ink-subtle); }
+.g-today { stroke:var(--ink-subtle); stroke-width:1; stroke-dasharray:2 3; }
+.g-tl { font:400 9px var(--font-mono); fill:var(--ink-muted); }
+.mk circle { fill:var(--ground); stroke:var(--blue-light); stroke-width:1.6; transition:fill .2s; }
+.mk text { font:500 8px var(--font-mono); fill:var(--blue-light); pointer-events:none; }
+.mk { cursor:pointer; }
+.mk.hot circle { fill:var(--blue-light); stroke:var(--ink); }
+.mk.hot text { fill:var(--ground); }
+.tip { position:absolute; left:0; top:0; z-index:5; width:230px; box-sizing:border-box; padding:8px 11px 9px; border-radius:6px; background:var(--surface-raised); border:1px solid var(--blue); box-shadow:0 8px 20px rgba(0,0,0,.5); opacity:0; transform:translate(-50%, calc(-100% - 12px)) translateY(4px); transition:opacity .2s, transform .2s; pointer-events:none; }
+.tip.show { opacity:1; transform:translate(-50%, calc(-100% - 12px)); }
+.tip-t { margin-top:5px; font:400 11.5px/1.4 var(--font-sans); color:var(--ink); }
+.tip-f { margin-top:6px; font:400 9px/1.3 var(--font-mono); color:var(--ink-subtle); }
+
 /* Controls (as intake) */
 .hint { position:fixed; right:max(16px, env(safe-area-inset-right, 0px)); bottom:16px; z-index:100; display:flex; align-items:center; gap:8px; height:32px; max-width:320px; box-sizing:border-box; padding:0 14px 0 5px; overflow:hidden; white-space:nowrap; border-radius:16px; background:var(--surface); border:.5px solid var(--line-strong); color:var(--ink-muted); font:400 11px/1 var(--font-mono); cursor:pointer; transition:max-width .45s cubic-bezier(.2,.7,.2,1), padding .45s cubic-bezier(.2,.7,.2,1); }
 .hint-icon { flex:none; width:21px; text-align:center; font-size:15px; line-height:1; font-variant-emoji:text; color:var(--ink); }
@@ -347,10 +415,49 @@ body.rec .hint { display:none; }
       <div class="list-head" id="listHead">
         <span class="label">Engagement from target buyers · last 3 months</span>
         <div class="toolbar" id="toolbar">
-          <button class="tb primary" id="bFunnel" type="button" title="Screen 4, not built yet"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 2h9L7 6.5V10L5 9V6.5z"/></svg>Open funnel</button>
+          <button class="tb primary" id="bFunnel" type="button"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 2h9L7 6.5V10L5 9V6.5z"/></svg>Open funnel</button>
         </div>
       </div>
       <div class="ranks" id="ranks"></div>
+    </div>
+
+    <div class="scroll" id="scroller4">
+      <header class="head">
+        <div>
+          <div class="eyebrow">Liftoff · GTM playbook</div>
+          <h1>Sales funnel · week 12</h1>
+        </div>
+      </header>
+
+      <div class="pin" id="pin4">
+        <section class="fold" id="panel4" aria-live="polite"><div><div class="panel-in">
+          <div class="fold open" id="filesFold4"><div><div class="files" id="files4"></div></div></div>
+          <div class="fold" id="readFold4"><div><div class="read-line"><span class="okdot"><svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="#00131d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span><span id="readTxt4"></span></div></div></div>
+          <div class="fold open" id="tickerFold4"><div><div class="ticker" id="ticker4"></div></div></div>
+          <div class="fold" id="summaryFold4"><div><div class="summary">
+            <div class="stats s4" id="stats4"></div>
+            <div class="verdict"><small>Verdict</small><span class="ans" id="verdict"></span></div>
+            <div class="fold" id="recFold"><div><article class="rec" id="rec">
+              <div><div class="label">Next playbook</div><div class="rec-t">Pilot-to-contract conversion</div><div class="rec-txt ans">Start with the 5 pilots that end before April. Converting 2 in 3 reaches 11 by June.</div></div>
+              <button class="btn-go" id="bPlan" type="button"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span id="bPlanLabel">Plan the conversion</span></button>
+            </article></div></div>
+          </div></div></div>
+        </div></div></section>
+      </div>
+
+      <div class="fold open" id="funnelFold"><div><div class="later" id="funnelWrap">
+        <div class="list-head"><span class="label">Funnel · weeks 1–12</span></div>
+        <div class="funnel" id="funnel"></div>
+      </div></div></div>
+      <div class="later" id="graphWrap">
+        <div class="list-head" id="graphHead">
+          <span class="label">Cumulative · weeks from kickoff, 14 Nov 2026</span>
+          <div class="legend"><span class="lg-p" id="lg0"><i></i>Pilots won</span><span class="lg-f" id="lg1"><i></i>Full-price contracts</span><span class="lg-l" id="lg2"><i></i>Lift-off</span></div>
+        </div>
+        <div class="graph" id="graph"><svg id="gsvg" viewBox="0 0 686 236" aria-label="Pilot wins and full-price contracts by week"></svg>
+          <div class="tip" id="tip"><div class="label" id="tipH"></div><div class="tip-t" id="tipT"></div><div class="tip-f">Proposed by the weekly review · approved by the founder</div></div>
+        </div>
+      </div>
     </div>
 
     <div class="scrim" id="scrim"></div>
@@ -438,6 +545,44 @@ const EVAL = [   // html, rows to light [card, row, warn?]
   { h:"Expected: 2.8× your average", exp:true }
 ];
 
+/* ---------- Data, screen 4 (gtm-loop.md, "Screen 4 · Liftoff Board"). Invented for the vibe; funnel counts stay sharp. ---------- */
+const INPUTS4 = [
+  ["automated_crm_sync_2027-02-05.csv","CSV","auto","auto, daily"],
+  ["automated_pipeline_snapshot_51207.csv","CSV","auto","auto, weekly"],
+  ["automated_bank_feed_2027-02-05.csv","CSV","auto","auto, daily"],
+  ["meeting_summaries_w1-w12.md","MD","talk","from 19 meetings"],
+  ["weekly_review_changes_w1-w12.md","MD","talk","from 12 weekly reviews"],
+  ["seed_round_plan.md","MD","talk","from 4 conversations"]
+];
+const READ_TXT4 = "6 inputs read · 3 automated feeds, 3 learned from meetings, weekly reviews and investor talks";
+const THINK4 = [
+  { t:"612 engaged buyers, 118 conversations, 28 meetings, 9 pilots won", i:["crm_sync"] },
+  { t:"Three changes from the weekly review, approved by the founder; measuring the weeks after each", i:["weekly_review_changes"] },
+  { t:"Win rate 32% of meetings became pilots, up from 14% in the first four weeks", i:["crm_sync","meeting_summaries"] },
+  { t:"Full-price contracts: 3, all from pilots signed before kickoff; 12-week goal met", i:["pipeline_snapshot"] },
+  { t:"Burn about £[[20k]] a month: cash runs out in August, 26 weeks from now", i:["bank_feed"] },
+  { t:"The seed raise opens in April; investors fund full-price customers, not pilots", i:["seed_round_plan"] },
+  { t:"First investor meetings raised the bar: 10 full-price customers, not 3", i:["seed_round_plan"] },
+  { t:"Pilots convert at 1 in 3 so far; 5 new pilots end before April, 12 before June", i:["pipeline_snapshot"] },
+  { t:"Projection: 5 full-price contracts by April, 7 by June; lift-off needs 10" }
+];
+const FUNNEL = [["Reactions",4210],["Engaged buyers",612],["Conversations",118],["Meetings",28],["Pilots won",9]];
+const PILOT = [0,0,1,1,1,2,3,4,5,6,8,9];   // cumulative, weeks 1-12
+const FULL  = [0,0,0,1,1,1,2,2,2,3,3,3];
+const MARKS = [
+  { w:3, k:"offer",   t:"A free review of their first claim, instead of a demo." },
+  { w:6, k:"wording", t:"'Variation' became 'unpaid extra work', the clients' own phrase." },
+  { w:9, k:"offer",   t:"A 30-day pilot on one site, no contract." }
+];
+const WIN = [20, 33], CASH = 38, LIFT = 10;   // April to June; cash runs out early August
+const STATS4 = [   // value, decimals, prefix, suffix, label, warn
+  [32, 0, "", "%", "win rate · ▲ from 14%"],
+  [9, 0, "", "", "pilots won"],
+  [3, 0, "", " / 10", "full-price contracts", true],
+  [26, 0, "", " weeks", "runway · cash out in August"]
+];
+const VERDICT = "Pilot wins are ahead of plan. Investors fund full-price customers: you need 10 by April, when the seed raise opens. That's 7 more in 8 weeks. At today's pace you reach 5 by April and 7 by June.";
+
 /* ---------- helpers (as segments; streamWords and typeInto as intake) ---------- */
 const $ = id => document.getElementById(id);
 let paused = false, pauseStart = 0, pausedTotal = 0, frozen = [];
@@ -459,7 +604,8 @@ const rich = t => esc(t).replace(/\[\[(.+?)\]\]/g,'<span class="hush">$1</span>'
 const plain = t => rich(t.replace(/\{\{|\}\}/g, ""));
 const parts = t => t.split(/(\[\[.+?\]\]|\{\{.+?\}\})/).filter(Boolean).map(p => p.startsWith("[[") ? { t:p.slice(2,-2), k:"s" } : p.startsWith("{{") ? { t:p.slice(2,-2), k:"m" } : { t:p, k:null });
 
-const stage = $("stage"), scroller = $("scroller"), cursor = $("cursor");
+const stage = $("stage"), cursor = $("cursor");
+let scroller = $("scroller"), pinEl = $("pin");   // screen 4 swaps both
 const flags = new Set(location.hash.replace("#","").split("-").filter(Boolean));
 if (flags.has("rec")) document.body.classList.add("rec");
 if (flags.has("answers")) document.body.classList.add("blur-answers");
@@ -489,15 +635,20 @@ const ghost = c => `<div class="ghost" id="ghost-${c}" style="height:${40 + RANK
 const tagsHTML = T => T.map(([t, k]) => `<span class="tag ${k}">${esc(t)}</span>`).join("");
 function render() {
   $("ranks").innerHTML = RANK.map((_, c) => ghost(c)).join("");
-  $("files").innerHTML = INPUTS.map(([n, ext, kind, src], k) => `
-    <div class="file" id="file-${k}"><span class="ficon ${kind}">${ext}</span>
+  $("files").innerHTML = filesHTML(INPUTS, "");
+  $("files4").innerHTML = filesHTML(INPUTS4, "b");
+  $("funnel").innerHTML = FUNNEL.map(([l, n], k) => `<div class="fn"><div class="fn-bar"><i id="fn-${k}"></i></div><div class="fn-n" id="fnn-${k}">0</div><div class="fn-l">${l}</div></div>`).join("");
+  $("pTags").innerHTML = tagsHTML(TAGS_DRAFT);
+  draw();
+}
+function filesHTML(list, p) {
+  return list.map(([n, ext, kind, src], k) => `
+    <div class="file" id="${p}file-${k}"><span class="ficon ${kind}">${ext}</span>
       <div class="fmeta"><div class="fname">${esc(n)}</div><div class="fsize ${kind}">${ICON[kind]}${esc(src)}</div></div>
-      <span class="ring" id="ring-${k}"><svg class="arc" viewBox="0 0 20 20"><circle class="t" cx="10" cy="10" r="8" fill="none" stroke-width="2"/><circle class="p" cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg>
+      <span class="ring" id="${p}ring-${k}"><svg class="arc" viewBox="0 0 20 20"><circle class="t" cx="10" cy="10" r="8" fill="none" stroke-width="2"/><circle class="p" cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg>
       <span class="ok"><svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="#00131d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span></span>
     </div>`).join("");
-  $("pTags").innerHTML = tagsHTML(TAGS_DRAFT);
 }
-render();
 
 function materialize(c, instant) {
   const g = $("ghost-" + c); if (!g) return;
@@ -588,7 +739,7 @@ function scrollToY(y, dur) {
   });
 }
 const offsetIn = el => (el.getBoundingClientRect().top - scroller.getBoundingClientRect().top) / scale + scroller.scrollTop;
-const pinH = () => $("pin").offsetHeight;
+const pinH = () => pinEl.offsetHeight;
 async function scrollToCard(c, dur = 700) {
   const el = $("rk-" + c), top = offsetIn(el), h = el.offsetHeight, cur = scroller.scrollTop, view = scroller.clientHeight, ph = pinH();
   if (top >= cur + ph && top + h <= cur + view) return;
@@ -596,8 +747,8 @@ async function scrollToCard(c, dur = 700) {
 }
 
 /* ---------- ticker, rings, counters (as segments) ---------- */
-function ticker(it) {
-  const t = $("ticker"), line = document.createElement("div");
+function ticker(it, id = "ticker") {
+  const t = $(id), line = document.createElement("div");
   const cites = (it.i || []).map(c => `<span class="chip in">${esc(c)}</span>`).join("");
   line.className = "tl now";
   line.innerHTML = `<span class="tl-t">${rich(it.t)}</span>${cites ? `<span class="tl-c">${cites}</span>` : ""}`;
@@ -612,14 +763,14 @@ function countTo(el, to, dec, pre, suf, dur) {
   return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur);
     el.innerHTML = pre + (to * (1 - Math.pow(1 - p, 3))).toFixed(dec) + suf; p < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
 }
-function ring(k, dur) {
-  const c = $("ring-" + k).querySelector(".p"), L = 50.27, t0 = now(); dur *= SLOW;
-  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur); c.style.strokeDashoffset = L * (1 - (1 - Math.pow(1 - p, 2)));
-    if (p < 1) requestAnimationFrame(f); else { $("ring-" + k).classList.add("done"); res(); } }; requestAnimationFrame(f); });
+function ring(k, dur, p = "") {
+  const c = $(p + "ring-" + k).querySelector(".p"), L = 50.27, t0 = now(); dur *= SLOW;
+  return new Promise(res => { const f = () => { const q = Math.min(1, (now() - t0) / dur); c.style.strokeDashoffset = L * (1 - (1 - Math.pow(1 - q, 2)));
+    if (q < 1) requestAnimationFrame(f); else { $(p + "ring-" + k).classList.add("done"); res(); } }; requestAnimationFrame(f); });
 }
-function setStats(animate) {
-  $("stats").innerHTML = STATS.map((x, i) => `<div class="stat"><div class="stat-num"><span id="sn${i}">${animate ? x[2] + (0).toFixed(x[1]) : x[2] + x[0].toFixed(x[1])}</span><small>${x[3]}</small></div><div class="stat-lbl">${esc(x[4])}</div></div>`).join("");
-  if (animate) return Promise.all(STATS.map((x, i) => countTo($("sn" + i), x[0], x[1], x[2], "", 1100)));
+function setStats(animate, S = STATS, id = "stats") {
+  $(id).innerHTML = S.map((x, i) => `<div class="stat${x[5] ? " warn" : ""}"><div class="stat-num"><span id="${id}-${i}">${animate ? x[2] + (0).toFixed(x[1]) : x[2] + x[0].toFixed(x[1])}</span><small>${x[3]}</small></div><div class="stat-lbl">${esc(x[4])}</div></div>`).join("");
+  if (animate) return Promise.all(S.map((x, i) => countTo($(id + "-" + i), x[0], x[1], x[2], "", 1100)));
 }
 function showSummary() { $("tickerFold").classList.remove("open"); $("summaryFold").classList.add("open"); }
 function markBest(on = true) { RANK.forEach((_, c) => $(`r-${c}-0`).classList.toggle("best", on)); }
@@ -756,8 +907,154 @@ async function beatDiscuss() {
   post.classList.add("approved", "glow");
   $("bDiscuss").style.visibility = "hidden";
   await sleep(1800); post.classList.remove("glow");
-  // screen 3's last move ("Open funnel" to screen 4) waits until screen 4 is built
+  // last move: open the funnel, slide to screen 4 (it plays on the next Space)
+  await sleep(500);
+  await scrollToY(offsetIn($("listHead")) - pinH() - 8, 700);
+  const fb = $("bFunnel");
+  await moveTo(fb); await click(fb);
+  cursor.style.opacity = 0;
+  goBoard();
+  await sleep(1400);
+  state.phase = "board";
+}
+
+
+/* ---------- Screen 4: the graph. One redraw per frame from the state below; tween() moves it (pause-aware). ---------- */
+const G = { W:686, H:236, L:28, R:84, T:12, B:24 };
+const gs = { xmax:12, ymax:10, pilot:0, full:0, open:0, today:0, win:0, lift:0, bandP:0, bandF:0, hot:-1 };
+const gx = w => G.L + (w - 1) / (gs.xmax - 1) * (G.W - G.L - G.R);
+const gy = v => G.H - G.B - v / gs.ymax * (G.H - G.T - G.B);
+const pMid = w => 9 + (w - 12) * 9.5 / 8, pSpr = w => (w - 12) * .4;   // pilots: past 18 by the end of March (week 20)
+const fMid = w => w <= 20 ? 3 + (w - 12) * .25 : 5 + (w - 20) * 2 / 13, fSpr = w => (w - 12) * .12;   // full price: 5 by April, 7 by June
+function linePts(data, p) {
+  const n = data.length - 1, upto = p * n, k = Math.floor(upto), f = upto - k, pts = [];
+  for (let i = 0; i <= k; i++) pts.push([gx(i + 1), gy(data[i])]);
+  if (f > 0 && k < n) pts.push([gx(k + 1 + f), gy(data[k] + (data[k + 1] - data[k]) * f)]);
+  return pts;
+}
+function band(mid, spr, wEnd, cls) {
+  if (wEnd <= 12.01) return "";
+  const up = [], dn = [], md = [];
+  for (let i = 0; i <= 24; i++) { const w = 12 + (wEnd - 12) * i / 24;
+    up.push(`${gx(w).toFixed(1)},${gy(mid(w) + spr(w)).toFixed(1)}`); dn.push(`${gx(w).toFixed(1)},${gy(Math.max(0, mid(w) - spr(w))).toFixed(1)}`); md.push(`${gx(w).toFixed(1)},${gy(mid(w)).toFixed(1)}`); }
+  return `<polygon class="${cls}" points="${up.concat(dn.reverse()).join(" ")}"/><polyline class="${cls}-m" points="${md.join(" ")}"/>`;
+}
+function draw() {
+  const pw = G.W - G.L - G.R, y0 = G.H - G.B, r = gs.xmax - 1;
+  let s = "";
+  if (gs.win > 0) { const a = gx(WIN[0]), b = gx(WIN[1]);
+    s += `<g opacity="${gs.win}"><rect class="g-win" x="${a}" y="${G.T}" width="${b - a}" height="${y0 - G.T}"/><line class="g-wedge" x1="${a}" x2="${a}" y1="${G.T}" y2="${y0}"/><line class="g-wedge" x1="${b}" x2="${b}" y1="${G.T}" y2="${y0}"/>
+      <text class="g-wl" x="${(a + b) / 2}" y="${gy(15.5)}" text-anchor="middle">Full-price window · April to June</text>
+      <text class="g-ws" x="${(a + b) / 2}" y="${gy(15.5) + 12}" text-anchor="middle">seed raise opens → must close</text></g>`; }
+  const ys = gs.ymax > 13 ? 5 : 2;
+  for (let v = 0; v <= gs.ymax + .01; v += ys) s += `<line class="g-grid" x1="${G.L}" x2="${G.L + pw}" y1="${gy(v)}" y2="${gy(v)}"/><text class="g-ax" x="${G.L - 7}" y="${gy(v) + 3}" text-anchor="end">${v}</text>`;
+  s += `<line class="g-base" x1="${G.L}" x2="${G.L + pw}" y1="${y0}" y2="${y0}"/>`;
+  const xt = gs.xmax > 16 ? [1, 4, 8, 12, 16, 20, 24, 28, 32, 36] : PILOT.map((_, i) => i + 1);
+  xt.filter(w => w <= gs.xmax + .01).forEach(w => s += `<text class="g-ax" x="${gx(w)}" y="${y0 + 15}" text-anchor="middle">W${w}</text>`);
+  if (gs.today > 0) s += `<g opacity="${gs.today}"><line class="g-today" x1="${gx(12)}" x2="${gx(12)}" y1="${G.T + 4}" y2="${y0}"/><text class="g-tl" x="${gx(12) - 4}" y="${G.T + 10}" text-anchor="end">Today · W12</text></g>`;
+  if (gs.open > 0) { const x = gx(CASH);
+    s += `<g opacity="${gs.open}"><line class="g-cash" x1="${x}" x2="${x}" y1="${G.T}" y2="${y0}"/><text class="g-cl" x="${x + 7}" y="${G.T + 10}">Cash runs out</text><text class="g-cs" x="${x + 7}" y="${G.T + 23}">early August</text></g>`; }
+  if (gs.lift > 0) { const y = gy(LIFT);
+    s += `<line class="g-lift" x1="${G.L}" x2="${G.L + pw * gs.lift}" y1="${y}" y2="${y}"/>`;
+    if (gs.lift > .98) s += `<text class="g-ll" x="${G.L + pw - 4}" y="${y - 6}" text-anchor="end">Lift-off: 10 full-price contracts</text>`; }
+  s += band(pMid, pSpr, 12 + gs.bandP * 8, "g-bp");
+  s += band(fMid, fSpr, 12 + gs.bandF * (WIN[1] - 12), "g-bf");
+  if (gs.bandP > .98) s += `<text class="g-pl p" x="${gx(20) + 6}" y="${gy(pMid(20)) + 3}">18+ by end of March</text>`;
+  if (gs.bandF > .98) s += `<circle class="g-dot-f" cx="${gx(20)}" cy="${gy(5)}" r="2.5"/><text class="g-pl f" x="${gx(20)}" y="${gy(5 - fSpr(20)) + 13}" text-anchor="middle">5 by April</text>
+    <circle class="g-dot-f" cx="${gx(WIN[1])}" cy="${gy(7)}" r="2.5"/><text class="g-pl f" x="${gx(WIN[1])}" y="${gy(7 - fSpr(WIN[1])) + 13}" text-anchor="middle">7 by June</text>`;
+  const line = (data, p, cls) => { if (p <= 0) return ""; const pts = linePts(data, p), e = pts[pts.length - 1];
+    return `<polyline class="g-${cls}" points="${pts.map(q => q.map(v => v.toFixed(1)).join(",")).join(" ")}"/><circle class="g-dot-${cls}" cx="${e[0]}" cy="${e[1]}" r="3"/>`; };
+  s += line(FULL, gs.full, "f");
+  s += line(PILOT, gs.pilot, "p");
+  MARKS.forEach((m, i) => { if (gs.pilot * (PILOT.length - 1) < m.w - 1) return;
+    s += `<g class="mk${gs.hot === i ? " hot" : ""}" data-i="${i}" id="mk-${i}"><circle cx="${gx(m.w)}" cy="${gy(PILOT[m.w - 1])}" r="6.5"/><text x="${gx(m.w)}" y="${gy(PILOT[m.w - 1]) + 2.8}" text-anchor="middle">${i + 1}</text></g>`; });
+  $("gsvg").innerHTML = s;
+}
+const ease3 = p => p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2, lin = p => p;
+function tween(to, dur, ease = ease3) {
+  const from = {}; for (const k in to) from[k] = gs[k];
+  const t0 = now(); dur *= SLOW;
+  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur), e = ease(p);
+    for (const k in to) gs[k] = from[k] + (to[k] - from[k]) * e; draw(); p < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
+}
+function showTip(i) {
+  gs.hot = i; draw();
+  const tip = $("tip");
+  if (i < 0) { tip.classList.remove("show"); return; }
+  const m = MARKS[i], sr = $("gsvg").getBoundingClientRect(), gr = $("graph").getBoundingClientRect(), k = sr.width / scale / G.W;
+  tip.style.left = (sr.left - gr.left) / scale + gx(m.w) * k + "px"; tip.style.top = (sr.top - gr.top) / scale + (gy(PILOT[m.w - 1]) - 6) * k + "px";
+  $("tipH").textContent = `Week ${m.w} · ${m.k}`; $("tipT").textContent = m.t;
+  tip.classList.add("show");
+}
+$("gsvg").addEventListener("mouseover", e => { const g = e.target.closest(".mk"); if (g && !state.running) showTip(+g.dataset.i); });
+$("gsvg").addEventListener("mouseout", e => { if (e.target.closest(".mk") && !state.running) showTip(-1); });
+render();
+
+/* ---------- Screen 4: slide in, then Beat 3: files, funnel, graph, verdict, the way out ---------- */
+function goBoard(instant) {
+  closeDrawer();
+  const m = document.querySelector(".main");
+  if (instant) { m.classList.add("instant"); requestAnimationFrame(() => requestAnimationFrame(() => m.classList.remove("instant"))); }
+  m.classList.add("s4");
+  scroller = $("scroller4"); pinEl = $("pin4");
+  setOn(3);
+}
+function fillFunnel() {
+  const lg = FUNNEL.map(f => Math.log10(f[1])), mx = lg[0];
+  return Promise.all(FUNNEL.map((f, k) => { $("fn-" + k).style.height = Math.max(8, lg[k] / mx * 52) + "px"; return countTo($("fnn-" + k), f[1], 0, "", "", 1100); }));
+}
+async function beatBoard() {
+  await sleep(400);
+  $("pin4").classList.add("on"); $("panel4").classList.add("open"); await sleep(420);
+  ticker({ t:"Loading inputs: 3 automated feeds, 3 learned from meetings, reviews and investor talks" }, "ticker4");
+  const rings = [];
+  for (let k = 0; k < INPUTS4.length; k++) { $("bfile-" + k).classList.add("in"); rings.push(ring(k, 900 + k * 180, "b")); await sleep(190); }
+  await Promise.all(rings); await sleep(700);
+  $("filesFold4").classList.remove("open"); $("readTxt4").textContent = READ_TXT4; $("readFold4").classList.add("open");
+  await sleep(500);
+  await scrollToY(offsetIn($("pin4")), 800);
+  const T = it => ticker(it, "ticker4");
+  // the funnel
+  T(THINK4[0]); $("funnelWrap").classList.add("show"); await sleep(300);
+  await fillFunnel(); await sleep(1100);
+  // pilots climb, with the loop's changes as markers
+  $("graphWrap").classList.add("show");
+  await scrollToY(offsetIn($("graphHead")) - pinH() - 2, 700);
+  T(THINK4[1]); $("lg0").classList.add("on");
+  await tween({ pilot:1 }, 3400, lin); await sleep(500);
+  T(THINK4[2]); await sleep(600);
+  placeCursor(G.W * .62, 470); await showCursor();
+  for (const i of [1, 2]) { await moveTo($("mk-" + i), .5, .5); showTip(i); await sleep(2600); }
+  showTip(-1); await moveTo($("graph"), .78, .2, 600);
+  cursor.style.opacity = 0;
+  // full price, nearly flat
+  T(THINK4[3]); $("lg1").classList.add("on");
+  await tween({ full:1 }, 2600, lin); await sleep(1100);
+  // the axis opens out to the day cash runs out
+  T(THINK4[4]); await tween({ xmax:CASH, ymax:22, open:1, today:1 }, 2000); await sleep(1500);
+  T(THINK4[5]); await tween({ win:1 }, 800); await sleep(1700);
+  T(THINK4[6]); $("lg2").classList.add("on"); await tween({ lift:1 }, 1100); await sleep(1600);
+  // projections widen with time
+  T(THINK4[7]); await tween({ bandP:1 }, 1500, lin); await sleep(1100);
+  T(THINK4[8]); await tween({ bandF:1 }, 2200, lin); await sleep(2400);
+  // results back up: figures, verdict, the next playbook
+  // the funnel folds away (its numbers live on in the figures), so the graph stays in view under the results
+  $("funnelFold").classList.remove("open"); await sleep(500);
+  $("tickerFold4").classList.remove("open"); $("summaryFold4").classList.add("open");
+  await scrollToY(offsetIn($("pin4")), 600);
+  await setStats(true, STATS4, "stats4");
+  await sleep(300);
+  await typeOut($("verdict"), VERDICT);
+  await sleep(900);
+  $("recFold").classList.add("open"); await sleep(500); $("rec").classList.add("glow");
   await sleep(1200);
+  const bp = $("bPlan");
+  placeCursor(G.W * .55, 470); await showCursor();
+  await moveTo(bp, .5, .55); await click(bp);
+  bp.classList.add("done"); $("bPlanLabel").textContent = "Added to next week's review"; $("rec").classList.remove("glow");
+  await sleep(1400);
+  await moveTo($("scroller4"), .5, .92, 700);
+  await sleep(1500);
   state.phase = "done";
 }
 
@@ -767,19 +1064,22 @@ const STEPS = [
   ["Intake", "intake.html", true],
   ["Segments", "segments.html", true],
   ["GTM feedback loop", "gtm-loop.html", true],
-  ["Sales funnel", "gtm-loop.html", false]
+  ["Liftoff Board", "gtm-loop.html#board", true]
 ];
 $("steps").innerHTML = STEPS.map(([name, file, built], k) => built
-  ? `<a class="step${file === PAGE ? " on" : ""}" href="${file}"${file === PAGE ? ' aria-current="page"' : ""}><span class="n">${k+1}</span>${name}</a>`
+  ? `<a class="step" href="${file}"><span class="n">${k+1}</span>${name}</a>`
   : `<span class="step off" title="Not built yet"><span class="n">${k+1}</span>${name}</span>`).join("");
 $("steps").addEventListener("click", e => {
   const a = e.target.closest("a.step"); if (!a) return;
   e.preventDefault();
   const file = a.getAttribute("href");
-  if (file === PAGE) { restart(); return; }
-  const keep = [...flags].filter(f => !["auto", "reviewed"].includes(f)).join("-");
+  if (file.split("#")[0] === PAGE) { restart(file.includes("#board") ? "board" : null); return; }
+  const keep = [...flags].filter(f => !["auto", "reviewed", "board"].includes(f)).join("-");
   location.href = file + (keep ? "#" + keep : "");
 });
+
+function setOn(i) { [...$("steps").children].forEach((a, k) => { a.classList.toggle("on", k === i); k === i ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"); }); }
+setOn(2);
 
 /* ---------- controls ---------- */
 async function play() {
@@ -788,15 +1088,17 @@ async function play() {
   state.running = true; $("hint").classList.add("mini");
   document.body.classList.remove("blur-answers");
   try {
-    if (state.phase === "initial") { await beatReview(); await sleep(600); }
-    if (state.phase === "reviewed") await beatDiscuss();
+    if (state.phase === "board") await beatBoard();   // screen 4, the last screencast: no next tab to pulse
+    else {   // screen 3 ends on screen 4, its tab lit
+      if (state.phase === "initial") { await beatReview(); await sleep(600); }
+      if (state.phase === "reviewed") await beatDiscuss();
+    }
     cursor.style.opacity = 0;
-    { const i = STEPS.findIndex(s => s[1] === PAGE), nx = $("steps").children[i + 1]; if (nx) nx.classList.add("next"); }   // ended: the next screencast's tab pulses
     document.body.classList.add("blur-answers");
   } finally { state.running = false; }
 }
 function restart(extra) {
-  const f = new Set(flags); ["auto", "reviewed"].forEach(x => f.delete(x)); if (extra) f.add(extra);
+  const f = new Set(flags); ["auto", "reviewed", "board"].forEach(x => f.delete(x)); if (extra) f.add(extra);
   location.hash = [...f].join("-"); location.reload();
 }
 addEventListener("keydown", e => {
@@ -804,13 +1106,16 @@ addEventListener("keydown", e => {
   if (e.key === " " || e.key === "Enter") { e.preventDefault(); play(); }
   else if (e.key === "1") restart();
   else if (e.key === "2") restart("reviewed");
+  else if (e.key === "3") restart("board");
   else if (e.key === "b" || e.key === "B") document.body.classList.toggle("blur-answers");
 });
 $("hint").addEventListener("click", play);
 setTimeout(() => $("hint").classList.add("mini"), 2500);
 $("btnGo").addEventListener("click", () => { if (state.phase === "initial") play(); });
 
-if (flags.has("reviewed")) reviewedInstant();
+if (flags.has("board")) { goBoard(true); state.phase = "board"; }
+else if (flags.has("reviewed")) reviewedInstant();
+$("bFunnel").addEventListener("click", () => { if (!state.running && (state.phase === "initial" || state.phase === "reviewed")) { goBoard(); state.phase = "board"; } });
 if (flags.has("auto")) setTimeout(play, 1500);
 })();
 </script>
