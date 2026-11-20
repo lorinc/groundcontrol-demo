@@ -1,0 +1,950 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Liftoff Segments</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<!--
+  Screencast 2 of 4: Segment scan and rank. Scripted playback, recorded at 1920x1080.
+  Blur: names and numbers always; whole texts too while paused or after the end (SCOPE.md, "Show the system").
+  Keys: Space or Enter = play, and pause / resume while playing · 1 = restart · 2 = start scanned (scoring next) · 3 = start scored (sorting next) · B = blur whole texts on / off
+  Hash flags (joined by "-"): rec = hide the key hint and edge padding, for recording · auto = play on load · scanned / scored = start at that point · answers = start with whole texts blurred
+  Example for OBS: segments.html#rec-auto
+-->
+<style>
+/* Layout: a fixed 960x540 app stage, scaled to the window; rail + one scrolling column: header, the inputs-and-thinking panel pinned on top as the summary header, then the segment cards; paper drawer for the pick. */
+:root {
+  color-scheme: dark;
+  /* GroundControl tokens (reference/groundcontrol/DesignFolder/tokens.css) */
+  --ground:#0e192b; --ground-glow:#152b50; --surface:#13233a; --surface-raised:#1d3a64;
+  --line:#33476c; --line-strong:#6b7889;
+  --ink:#fefeff; --ink-muted:#c4cfe1; --ink-subtle:#97a2b4;
+  --blue:#4c8dff; --blue-light:#8eb4ff; --green:#3ebf80; --on-green:#00131d; --orange:#f2a33b;
+  --paper:#f7f8fc; --paper-raised:#ffffff; --paper-tint:#e8eefe; --paper-line:#ecedf2;
+  --paper-ink:#13213c; --paper-ink-muted:#5b6475; --paper-blue:#2357de;
+  --font-display:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+  --font-sans:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,monospace;
+  /* Origins, as in intake */
+  --st-S:#3ebf80; --st-M:#ead94c; --st-D:#f2a33b;
+  --pp-S:#17734a; --pp-M:#7a6400; --pp-D:#9a5600;
+}
+html, body { height:100%; }
+body {
+  margin:0; background:var(--ground); overflow:hidden; box-sizing:border-box;
+  padding-block:16px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+body.rec { padding:0; }
+.viewport { position:relative; width:100%; height:100%; }
+.stage {
+  position:absolute; left:0; top:0; width:960px; height:540px; transform-origin:0 0; overflow:hidden;
+  display:grid; grid-template-columns:188px minmax(0,1fr);
+  background:radial-gradient(ellipse 55% 75% at 100% 0%, var(--ground-glow), rgba(21,43,80,0) 70%), var(--ground);
+  color:var(--ink); font-family:var(--font-sans);
+}
+button { font:inherit; color:inherit; }
+
+/* Blur: the sample company's names and numbers always; whole texts too when paused or ended. */
+.hush { display:inline-block; filter:blur(4.5px); user-select:none; }
+body.blur-answers .ans { filter:blur(5px); transition:filter .9s ease; }
+
+/* ---------- Rail (as intake) ---------- */
+.rail { padding:24px 14px 18px 18px; display:flex; flex-direction:column; gap:22px; border-right:.5px solid var(--line); min-height:0; }
+.brand { font:500 16px/1 var(--font-display); letter-spacing:-.01em; }
+.brand span { display:block; margin-top:8px; font:400 10.5px/1 var(--font-mono); letter-spacing:.18em; color:var(--green); }
+.steps { display:flex; flex-direction:column; gap:4px; }
+.step { display:flex; gap:10px; align-items:center; padding:8px 10px; border-radius:6px; border:1px solid transparent; font:400 12.5px/1.2 var(--font-sans); color:var(--ink-subtle); }
+.step .n { font:400 10.5px/1 var(--font-mono); color:var(--ink-subtle); width:12px; }
+.step.on { background:var(--surface-raised); border-color:var(--blue); color:var(--ink); }
+.step.on .n { color:var(--blue-light); }
+a.step { text-decoration:none; cursor:pointer; transition:background-color .2s, color .2s; }
+a.step:not(.on):hover { background:var(--surface); color:var(--ink-muted); }
+a.step:focus-visible { outline:1px solid var(--blue-light); outline-offset:-1px; }
+.step.off { opacity:.55; }
+.co { margin-top:auto; display:flex; flex-direction:column; gap:5px; padding:12px; border-radius:6px; background:var(--surface); border:.5px solid var(--line); }
+.label { font:400 10px/1.2 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
+.co-name { font:500 15px/1.2 var(--font-display); }
+.co-desc { font:400 11.5px/1.35 var(--font-sans); color:var(--ink-muted); }
+.foot { font:400 10px/1.35 var(--font-mono); color:var(--ink-subtle); }
+
+/* ---------- Main: one column, as intake. The inputs-and-thinking panel pins to the top and becomes the summary header. ---------- */
+.main { position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.scroll { flex:1; min-height:0; overflow-y:auto; padding:26px 34px 40px; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+.eyebrow { font:400 11.5px/1.2 var(--font-mono); letter-spacing:.18em; text-transform:uppercase; color:var(--green); }
+h1 { font:500 28px/1.2 var(--font-display); margin:8px 0 0; text-wrap:balance; }
+.sub { font:400 13.5px/1.4 var(--font-sans); color:var(--ink-muted); margin:6px 0 0; }
+.sub b { font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums; }
+.btn-go { flex:none; display:inline-flex; align-items:center; gap:8px; padding:11px 14px; border:0; border-radius:5px; background:var(--green); color:var(--on-green); font:500 13px/1 var(--font-display); cursor:pointer; transition:transform .12s, background .3s, color .3s; }
+.btn-go svg { width:14px; height:14px; }
+.btn-go.done { background:var(--surface); color:var(--ink-muted); box-shadow:inset 0 0 0 1px var(--line-strong); cursor:default; }
+.pressed { transform:scale(.96); }
+
+.pin { position:sticky; top:-26px; z-index:6; margin:0 -34px; padding:0 34px; background:var(--ground); transition:padding .3s; }
+.pin.on { padding:16px 34px 12px; box-shadow:0 12px 16px -14px rgba(0,0,0,.7); }
+.panel-in { background:var(--surface); border:.5px solid var(--line); border-radius:6px; padding:12px 16px; }
+.files { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px 10px; padding-bottom:4px; }
+.file { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:5px; background:var(--ground); border:.5px solid var(--line); min-width:0; opacity:0; transform:translateY(8px); transition:opacity .35s, transform .35s; }
+.file.in { opacity:1; transform:none; }
+.ficon { flex:none; width:22px; height:27px; border-radius:3px; background:var(--surface-raised); position:relative; display:grid; place-items:end center; padding-bottom:3px; box-sizing:border-box; font:400 6px/1 var(--font-mono); color:var(--blue-light); letter-spacing:.02em; }
+.ficon::before { content:""; position:absolute; top:0; right:0; width:7px; height:7px; background:var(--ground); border-bottom-left-radius:2px; }
+.fmeta { min-width:0; flex:1; }
+.fname { font:400 10px/1.2 var(--font-mono); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fsize { font:400 9.5px/1.2 var(--font-mono); color:var(--ink-subtle); margin-top:3px; white-space:nowrap; }
+.ring { flex:none; width:18px; height:18px; position:relative; }
+.ring svg.arc { width:18px; height:18px; transform:rotate(-90deg); transition:opacity .2s; }
+.ring .t { stroke:var(--line); }
+.ring .p { stroke:var(--blue-light); }
+.ring .ok { position:absolute; inset:0; display:grid; place-items:center; border-radius:50%; background:var(--green); opacity:0; transform:scale(.6); transition:opacity .2s, transform .25s; }
+.ring.done svg.arc { opacity:0; }
+.ring.done .ok { opacity:1; transform:none; }
+.read-line { display:flex; align-items:center; gap:8px; font:400 10.5px/1.3 var(--font-mono); color:var(--ink-muted); white-space:nowrap; overflow:hidden; }
+.read-line span:last-child { overflow:hidden; text-overflow:ellipsis; }
+.okdot { flex:none; width:14px; height:14px; border-radius:50%; background:var(--green); display:grid; place-items:center; }
+.ticker { height:88px; margin-top:8px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; }
+.tl { display:flex; align-items:center; gap:8px; min-width:0; font:400 11px/22px var(--font-mono); color:var(--ink-subtle); white-space:nowrap; animation:tin .32s cubic-bezier(.2,.7,.2,1); transition:opacity .3s, color .3s; }
+.tl-t { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.tl-t::before { content:"› "; color:var(--line-strong); }
+.tl.now { color:var(--ink-muted); }
+.tl.now .tl-t::before { color:var(--green); }
+.tl.old1 { opacity:.6; } .tl.old2 { opacity:.35; } .tl.old3 { opacity:.18; }
+.tl-c { display:flex; gap:4px; flex:none; }
+.chip { box-sizing:border-box; display:inline-flex; align-items:center; gap:4px; padding:1px 6px; border-radius:4px; font:400 8.5px/1.5 var(--font-mono); white-space:nowrap; animation:cin .25s ease-out .1s both; }
+.chip.in { color:var(--blue-light); background:rgba(76,141,255,.12); border:.5px solid rgba(142,180,255,.45); }
+.chip.web { color:var(--green); background:rgba(62,191,128,.1); border:.5px solid rgba(62,191,128,.45); }
+.chip.web::before { content:"↗"; }
+@keyframes tin { from { transform:translateY(22px); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes cin { from { transform:scale(.85); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes blink { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+.summary { padding-top:10px; }
+.stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:18px; }
+.stat { border-top:1px solid var(--blue); padding-top:8px; }
+.stat-num { font:500 26px/1 var(--font-display); color:var(--blue-light); letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.stat-num small { font-size:14px; color:var(--ink-subtle); letter-spacing:0; margin-left:2px; }
+.stat-lbl { margin-top:5px; font:400 11.5px/1.35 var(--font-sans); color:var(--ink-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.callout { margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:8px 14px; border-radius:6px; background:var(--surface-raised); border:1px solid var(--blue); font:500 12.5px/1.35 var(--font-display); color:var(--ink); }
+.callout small { flex:none; font:400 10px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
+
+/* Segment list: label + toolbar, then one column of cards */
+.list-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:14px 0 9px; min-height:30px; }
+.toolbar { display:flex; align-items:center; gap:8px; opacity:0; transform:translateY(-4px); transition:opacity .45s, transform .45s; pointer-events:none; }
+.toolbar.show { opacity:1; transform:none; pointer-events:auto; }
+.tb { display:inline-flex; align-items:center; gap:6px; padding:7px 11px; border-radius:5px; border:1px solid var(--line-strong); background:var(--surface); font:500 11.5px/1 var(--font-display); color:var(--ink); cursor:pointer; transition:transform .12s, background .3s, color .3s, border-color .3s; position:relative; }
+.tb svg { width:12px; height:12px; }
+.tb.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+.tb.primary.done { background:var(--surface); border-color:var(--line-strong); color:var(--ink-muted); cursor:default; }
+.tb .upd { width:6px; height:6px; border-radius:50%; background:var(--green); opacity:0; transition:opacity .3s; }
+.tb .upd.on { opacity:1; animation:blink 1.4s infinite; }
+.sort { position:relative; }
+.tb.sortb { border-color:var(--line); color:var(--ink-muted); font-family:var(--font-sans); font-weight:400; }
+.tb.sortb b { font-weight:500; color:var(--ink); }
+.menu { position:absolute; right:0; top:calc(100% + 4px); z-index:15; min-width:206px; padding:4px; border-radius:6px; background:var(--surface-raised); border:.5px solid var(--line-strong); box-shadow:0 10px 24px rgba(0,0,0,.4); opacity:0; transform:translateY(-4px); transition:opacity .2s, transform .2s; pointer-events:none; }
+.menu.open { opacity:1; transform:none; pointer-events:auto; }
+.mi { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 9px; border-radius:4px; font:400 11.5px/1.2 var(--font-sans); color:var(--ink-muted); }
+.mi.cur { color:var(--ink); }
+.mi.cur::after { content:"✓"; color:var(--green); font-size:11px; }
+.mi.hover { background:rgba(76,141,255,.22); color:var(--ink); }
+.mi small { font:400 9px/1 var(--font-mono); color:var(--ink-subtle); }
+.mi-sep { height:.5px; margin:3px 6px; background:var(--line); }
+.cards { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; }
+.ghost { height:84px; box-sizing:border-box; border-radius:6px; border:.5px dashed var(--line); background:rgba(19,35,58,.4); padding:14px 16px; display:flex; flex-direction:column; gap:10px; opacity:.5; }
+.ghost i { display:block; height:6px; border-radius:3px; background:var(--line); opacity:.7; }
+.ghost i:first-child { height:10px; }
+.card.born { animation:born .7s cubic-bezier(.2,.7,.2,1); }
+@keyframes born { from { opacity:0; transform:translateY(6px) scale(.985); } to { opacity:1; transform:none; } }
+
+/* Segment card */
+.card { background:var(--surface); border:.5px solid var(--line); border-radius:6px; padding:10px 11px 8px; display:flex; flex-direction:column; gap:7px; transition:border-color .3s, box-shadow .3s, background-color .3s; }
+.card.active { border-color:var(--blue); box-shadow:0 0 0 .5px var(--blue); }
+.card.top { border-color:var(--green); box-shadow:0 0 0 .5px var(--green), 0 0 24px rgba(62,191,128,.14); }
+.c-head { display:grid; grid-template-columns:14px minmax(0,1fr) auto; gap:6px; align-items:start; }
+.c-num { font:400 10px/1.5 var(--font-mono); color:var(--ink-subtle); }
+.c-title { font:500 13px/1.25 var(--font-display); color:var(--ink); border-radius:3px; }
+.c-def { margin-top:2px; font:400 9px/1.3 var(--font-mono); color:var(--ink-subtle); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.c-conf { font:400 8.5px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; padding:3px 5px; border-radius:3px; color:var(--ink-subtle); border:.5px solid var(--line); white-space:nowrap; }
+.c-conf.high { color:var(--st-S); border-color:rgba(62,191,128,.55); background:rgba(62,191,128,.1); }
+.c-conf.medium { color:var(--st-M); border-color:rgba(234,217,76,.5); background:rgba(234,217,76,.09); }
+.c-conf.low { color:var(--st-D); border-color:rgba(242,163,59,.55); background:rgba(242,163,59,.1); }
+.c-stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; padding:6px 0 5px; border-top:.5px solid var(--line); border-bottom:.5px solid var(--line); }
+.st-l { font:400 8px/1.2 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-subtle); }
+.st-v { margin-top:3px; font:500 14px/1.1 var(--font-display); color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.st-v.small { font:400 10.5px/1.45 var(--font-mono); color:var(--ink-muted); }
+.st-v.ok { color:var(--st-S); }
+.st-v.mid { color:var(--st-M); }
+.c-note { font:400 9px/1.3 var(--font-mono); color:var(--orange); }
+.c-row { display:grid; grid-template-columns:78px minmax(0,1fr); gap:8px; }
+.c-row .st-l { padding-top:2px; }
+.c-txt { font:400 10px/1.35 var(--font-sans); color:var(--ink-muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.empty { color:var(--line-strong); }
+.f-in { animation:fin .45s ease-out; }
+@keyframes fin { from { opacity:0; filter:blur(3px); } to { opacity:1; filter:none; } }
+
+.c-scores { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+.sc { padding:4px 6px 4px; border-radius:4px; border:.5px dashed var(--line); min-width:0; transition:border-color .3s, background-color .3s; }
+.sc.f { border-style:solid; }
+.sc.f.S { border-color:rgba(62,191,128,.5); background:rgba(62,191,128,.06); }
+.sc.f.M { border-color:rgba(234,217,76,.45); background:rgba(234,217,76,.05); }
+.sc.f.D { border-color:rgba(242,163,59,.5); background:rgba(242,163,59,.06); }
+.sc.pop { animation:pop .4s ease-out; }
+@keyframes pop { 0% { transform:scale(1); } 40% { transform:scale(1.06); } 100% { transform:scale(1); } }
+.sc.hot { box-shadow:0 0 0 1px var(--blue-light); }
+.sc-top { display:flex; justify-content:space-between; align-items:center; gap:4px; }
+.sc-l { font:400 7.5px/1.2 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-subtle); white-space:nowrap; }
+.sc-c { font:400 8.5px/1 var(--font-mono); color:var(--blue-light); font-variant-numeric:tabular-nums; }
+.sc-mid { display:flex; align-items:center; gap:6px; margin-top:2px; }
+.sc-v { font:500 14px/1.1 var(--font-display); color:var(--line-strong); font-variant-numeric:tabular-nums; min-width:9px; }
+.sc.S .sc-v { color:var(--st-S); } .sc.M .sc-v { color:var(--st-M); } .sc.D .sc-v { color:var(--st-D); }
+.pips { display:flex; gap:2px; }
+.pips i { width:7px; height:4px; border-radius:1px; background:var(--line); transition:background-color .3s; }
+.sc.S .pips i.on { background:var(--st-S); } .sc.M .pips i.on { background:var(--st-M); } .sc.D .pips i.on { background:var(--st-D); }
+.sc-s { margin-top:2px; font:400 7.5px/1.3 var(--font-mono); color:var(--ink-subtle); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:10px; }
+
+.c-foot { display:flex; justify-content:space-between; align-items:center; gap:4px; padding-top:6px; border-top:.5px solid var(--line); }
+.c-ev { white-space:nowrap; font:400 9px/1 var(--font-mono); color:var(--ink-subtle); font-variant-numeric:tabular-nums; }
+.c-ev .ev-l { color:var(--ink-muted); }
+.c-ev b { font-weight:400; color:var(--ink); }
+.c-bh { white-space:nowrap; display:flex; align-items:baseline; gap:3px; font:400 8px/1 var(--font-mono); letter-spacing:.03em; text-transform:uppercase; color:var(--ink-subtle); }
+.c-bh b { font:500 14px/1 var(--font-display); letter-spacing:0; color:var(--ink); font-variant-numeric:tabular-nums; }
+.c-bh .tag { padding:3px 5px; border-radius:3px; background:var(--green); color:var(--on-green); letter-spacing:.04em; opacity:0; transform:scale(.8); transition:opacity .3s, transform .3s; }
+.card.top .c-bh .tag { opacity:1; transform:none; }
+
+/* ---------- Reach popover (paper) ---------- */
+.pop-card { position:absolute; z-index:30; width:252px; box-sizing:border-box; padding:12px 14px; border-radius:8px; background:var(--paper); color:var(--paper-ink); box-shadow:0 12px 30px rgba(0,0,0,.45); opacity:0; transform:translateY(6px); transition:opacity .3s, transform .3s; pointer-events:none; }
+.pop-card.open { opacity:1; transform:none; }
+.pc-top { display:flex; justify-content:space-between; align-items:baseline; }
+.pc-top .label { color:var(--paper-ink-muted); }
+.pc-v { font:500 20px/1 var(--font-display); color:var(--pp-M); }
+.pc-v small { font-size:12px; color:var(--paper-ink-muted); }
+.pc-text { margin-top:8px; font:400 12px/1.45 var(--font-sans); }
+.pc-text strong { font-weight:500; color:var(--paper-blue); }
+.pc-meta { margin-top:9px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+/* ---------- Drawer (paper: the system's one light surface) ---------- */
+.scrim { position:absolute; inset:0; background:rgba(8,14,26,.55); opacity:0; pointer-events:none; transition:opacity .35s; z-index:20; }
+.scrim.open { opacity:1; }
+.drawer { position:absolute; top:12px; bottom:12px; right:12px; width:392px; z-index:21; display:flex; flex-direction:column; overflow:hidden; border-radius:8px; background:var(--paper); color:var(--paper-ink); transform:translateX(430px); transition:transform .45s cubic-bezier(.2,.8,.2,1); }
+.drawer.open { transform:none; }
+.d-head { padding:16px 18px 12px; border-bottom:1px solid var(--paper-line); }
+.d-eyebrow { font:400 10.5px/1.2 var(--font-mono); letter-spacing:.18em; text-transform:uppercase; color:var(--paper-ink-muted); }
+.d-q { margin-top:7px; font:500 16px/1.3 var(--font-display); text-wrap:balance; }
+.d-box { margin-top:10px; padding:9px 12px; border-radius:6px; background:var(--paper-raised); border:1px solid var(--paper-line); display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 14px; align-items:center; }
+.d-bh { font:500 30px/1 var(--font-display); color:var(--paper-ink); font-variant-numeric:tabular-nums; grid-row:span 2; }
+.d-bh small { font-size:13px; color:var(--paper-ink-muted); margin-left:2px; }
+.d-scores { display:flex; flex-wrap:wrap; gap:4px 10px; font:400 10.5px/1.3 var(--font-mono); color:var(--paper-ink-muted); }
+.d-scores b { font-weight:400; }
+.d-scores .S { color:var(--pp-S); } .d-scores .M { color:var(--pp-M); }
+.d-line { font:400 11.5px/1.35 var(--font-sans); color:var(--paper-ink); }
+.b-play { margin-top:12px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 12px; border:0; border-radius:5px; background:var(--paper-blue); color:#fff; font:500 12.5px/1 var(--font-display); cursor:pointer; transition:transform .12s, background .3s, color .3s; }
+.b-play svg { width:13px; height:13px; }
+.b-play.done { background:var(--paper-tint); color:var(--paper-blue); cursor:default; }
+.d-body { flex:1; min-height:0; overflow:hidden; padding:12px 18px 14px; display:flex; flex-direction:column; }
+.fold { display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1); }
+.fold.open { grid-template-rows:1fr; }
+.fold > div { overflow:hidden; min-height:0; }
+.mticker { height:84px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; }
+.ml { font:400 10.5px/21px var(--font-mono); color:var(--paper-ink-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:mlin .3s cubic-bezier(.2,.7,.2,1); transition:opacity .3s; }
+.ml::before { content:"› "; color:#b8bfcc; }
+.ml.now { color:var(--paper-ink); }
+.ml.now::before { color:var(--pp-S); }
+.ml.o1 { opacity:.65; } .ml.o2 { opacity:.38; } .ml.o3 { opacity:.18; }
+.ml .fit { font-weight:400; }
+@keyframes mlin { from { transform:translateY(21px); opacity:0; } to { transform:none; opacity:1; } }
+.f-s { color:var(--pp-S); } .f-f { color:var(--paper-blue); } .f-w { color:var(--pp-D); } .f-n { color:var(--paper-ink-muted); }
+
+.g-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; white-space:nowrap; }
+.g-head .label { color:var(--paper-ink-muted); }
+.g-list { display:flex; flex-direction:column; gap:4px; }
+.gp { display:flex; justify-content:space-between; align-items:center; gap:10px; opacity:0; transform:translateX(10px); transition:opacity .35s, transform .35s; }
+.gp.in { opacity:1; transform:none; }
+.gpill { position:relative; overflow:hidden; display:inline-block; padding:4px 10px; border-radius:999px; font:500 11px/1.1 var(--font-display); white-space:nowrap; }
+.gpill.s { color:#fff; background:linear-gradient(115deg, #17734a 0%, #3ebf80 45%, #4c8dff 100%); box-shadow:0 2px 10px rgba(62,191,128,.35), inset 0 1px 0 rgba(255,255,255,.35); padding:7px 13px; font-size:12.5px; }
+.gpill.f { color:var(--paper-blue); background:linear-gradient(115deg, #e8eefe, #d5e1ff); box-shadow:inset 0 0 0 1px rgba(35,87,222,.3), inset 0 1px 0 #fff; }
+.gpill.w { color:var(--pp-D); background:linear-gradient(115deg, #fff4e3, #fde6c4); box-shadow:inset 0 0 0 1px rgba(154,86,0,.25), inset 0 1px 0 #fff; }
+.gpill.n { color:var(--paper-ink-muted); background:#eef0f5; box-shadow:inset 0 0 0 1px #dde1ea; }
+.gpill::after { content:""; position:absolute; top:0; bottom:0; left:-60%; width:40%; background:linear-gradient(100deg, rgba(255,255,255,0), rgba(255,255,255,.65), rgba(255,255,255,0)); transform:skewX(-18deg); opacity:0; }
+.gp.in .gpill::after { animation:sheen 1.1s ease-out .15s; }
+@keyframes sheen { 0% { left:-60%; opacity:1; } 100% { left:130%; opacity:1; } }
+.fit-tag { font:400 9.5px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
+.gp-detail { margin:2px 0 4px; padding:8px 11px; border-radius:6px; background:var(--paper-raised); border:1px solid var(--paper-line); }
+.cite { font:400 11.5px/1.45 var(--font-sans); color:var(--paper-ink); }
+.cite-src { margin-top:4px; font:400 9.5px/1.3 var(--font-mono); color:var(--paper-ink-muted); }
+.gap { margin-top:6px; padding-top:6px; border-top:1px solid var(--paper-line); display:flex; gap:7px; font:400 11px/1.4 var(--font-sans); color:var(--pp-D); }
+.gap::before { content:"!"; flex:none; width:14px; height:14px; border-radius:50%; background:rgba(242,163,59,.2); color:var(--pp-D); font:500 10px/14px var(--font-display); text-align:center; }
+.pill { display:inline-block; padding:4px 7px; border-radius:5px; border:1px solid; font:500 10.5px/1 var(--font-sans); white-space:nowrap; }
+.pill.M { color:var(--pp-M); border-color:rgba(122,100,0,.4); background:rgba(234,217,76,.18); }
+.conf { display:flex; align-items:center; gap:6px; font:400 10.5px/1 var(--font-mono); color:var(--paper-blue); font-variant-numeric:tabular-nums; }
+.conf i { display:block; width:38px; height:3px; border-radius:2px; background:var(--paper-line); position:relative; overflow:hidden; }
+.conf i::after { content:""; position:absolute; inset:0 auto 0 0; width:calc(var(--v) * 100%); background:var(--paper-blue); }
+.p-src { font:400 9.5px/1.3 var(--font-mono); color:var(--paper-ink-muted); }
+
+/* ---------- Scripted cursor ---------- */
+.cursor { position:absolute; left:0; top:0; z-index:50; pointer-events:none; opacity:0; transition:opacity .3s; will-change:transform; }
+.cursor svg { display:block; width:17px; height:21px; filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.ripple { position:absolute; z-index:49; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%; border:2px solid var(--blue-light); pointer-events:none; animation:rip .5s ease-out forwards; }
+@keyframes rip { from { transform:scale(.3); opacity:1; } to { transform:scale(1.4); opacity:0; } }
+
+/* Controls (as intake) */
+.hint { position:fixed; right:max(16px, env(safe-area-inset-right, 0px)); bottom:16px; z-index:100; display:flex; align-items:center; gap:8px; height:32px; max-width:320px; box-sizing:border-box; padding:0 14px 0 5px; overflow:hidden; white-space:nowrap; border-radius:16px; background:var(--surface); border:.5px solid var(--line-strong); color:var(--ink-muted); font:400 11px/1 var(--font-mono); cursor:pointer; transition:max-width .45s cubic-bezier(.2,.7,.2,1), padding .45s cubic-bezier(.2,.7,.2,1); }
+.hint-icon { flex:none; width:21px; text-align:center; font-size:15px; line-height:1; font-variant-emoji:text; color:var(--ink); }
+.hint .keys { transition:opacity .25s; }
+.hint .keys b { font-weight:400; color:var(--ink); }
+.hint.mini { max-width:32px; padding:0 0 0 5px; }
+.hint.mini .keys { opacity:0; }
+.hint.mini:hover, .hint.mini:focus-visible { max-width:320px; padding:0 14px 0 5px; }
+.hint.mini:hover .keys, .hint.mini:focus-visible .keys { opacity:1; }
+.hint:focus-visible { outline:2px solid var(--blue-light); outline-offset:2px; }
+body.rec .hint { display:none; }
+</style>
+
+<div class="viewport" id="viewport">
+<div class="stage" id="stage">
+
+  <aside class="rail">
+    <div class="brand">GroundControl<span>LIFTOFF DEMO</span></div>
+    <nav class="steps" id="steps" aria-label="Screencasts"></nav>
+    <div class="co">
+      <div class="label">Company</div>
+      <div class="co-name"><span class="hush">Lintel</span></div>
+      <div class="co-desc">Site records for construction subcontractors. Pre-seed, UK.</div>
+    </div>
+    <div class="foot">Demo run. Names and numbers blurred.</div>
+  </aside>
+
+  <main class="main">
+    <div class="scroll" id="scroller">
+      <header class="head">
+        <div>
+          <div class="eyebrow">Liftoff · Segments</div>
+          <h1>Segment scan and rank.</h1>
+          <p class="sub">Six candidate segments from the Kickoff. <b id="scanned">0</b> of 6 scanned.</p>
+        </div>
+        <button class="btn-go" id="btnGo" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+          <span id="btnGoLabel">Run segment scan</span>
+        </button>
+      </header>
+
+      <div class="pin" id="pin">
+        <section class="fold" id="panel" aria-live="polite"><div><div class="panel-in">
+          <div class="fold open" id="filesFold"><div><div class="files" id="files"></div></div></div>
+          <div class="fold" id="readFold"><div><div class="read-line"><span class="okdot"><svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="#00131d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span><span id="readTxt"></span></div></div></div>
+          <div class="fold open" id="tickerFold"><div><div class="ticker" id="ticker"></div></div></div>
+          <div class="fold" id="summaryFold"><div><div class="summary"><div class="stats" id="stats"></div><div class="callout" id="callout"></div></div></div></div>
+        </div></div></section>
+      </div>
+
+      <div class="list-head" id="listHead">
+        <span class="label">Segments</span>
+        <div class="toolbar" id="toolbar">
+          <button class="tb" id="bDiscuss" type="button"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 2.5h9v6h-5l-2.5 2v-2h-1.5z"/></svg>Discuss segments<i class="upd" id="upd"></i></button>
+          <button class="tb primary" id="bScore" type="button"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 10V7M5 10V4M8 10V6M11 10V2"/></svg><span id="bScoreL">Score segments</span></button>
+          <div class="sort">
+            <button class="tb sortb" id="bSort" type="button">Sort: <b id="sortLbl">Your order</b><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3"/></svg></button>
+            <div class="menu" id="menu"></div>
+          </div>
+        </div>
+      </div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <div class="pop-card" id="popCard"></div>
+    <div class="scrim" id="scrim"></div>
+    <aside class="drawer" id="drawer" aria-label="The top segment">
+      <div class="d-head">
+        <div class="d-eyebrow">Top pick · Segment <span id="dNum"></span></div>
+        <div class="d-q ans" id="dTitle"></div>
+        <div class="d-box">
+          <div class="d-bh" id="dBh"></div>
+          <div class="d-scores" id="dScores"></div>
+          <div class="d-line ans" id="dLine"></div>
+        </div>
+        <div class="fold open" id="bFold"><div><button class="b-play" id="bPlay" type="button"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3.5h4v9h-4zM9.5 3.5h4v9h-4zM6.5 6h3"/></svg><span id="bPlayL">Find matching GTM playbooks from library</span></button></div></div>
+      </div>
+      <div class="d-body">
+        <div class="fold open" id="mFold"><div><div class="mticker" id="mTicker"></div></div></div>
+        <div class="fold" id="gFold"><div>
+          <div class="g-head"><span class="label">GTM motions · ranked</span><span class="p-src">7 motions · 52 plays</span></div>
+          <div class="g-list" id="gList"></div>
+        </div></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="cursor" id="cursor" aria-hidden="true">
+    <svg viewBox="0 0 17 21"><path d="M1.2 1.2v15.6l4.3-3.9 2.9 6.6 2.6-1.1-2.9-6.5h5.9z" fill="#fff" stroke="#0e192b" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+</div>
+
+<button class="hint" id="hint" type="button" aria-label="Play or pause"><span class="hint-icon" aria-hidden="true">⏯&#xFE0E;</span><span class="keys"><b>[Space]</b> play/pause, <b>[B]</b>lur</span></button>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- Data ----------
+   Segments: the six from the Kickoff's slicing (brain 5.1, 10.4), in the founder's order. Figures from 2-segment-scan/research.md (real public sources).
+   Scores: [value 1-5, origin S sourced · M material-inferred · D domain-inferred, confidence %, source].  [[...]] = blurred name or number. */
+const SC_LABEL = ["Pain", "Willing to pay", "Referrals", "Reach"];
+const SEG = [
+ { n:"M&E subcontractors", full:"M&E subcontractors, 20 to 249 staff", def:"20–249 staff · SIC 43.21, 43.22", firms:"2,340", val:"£16.7m", chk:"✓ 5%", ck:"ok", conf:"high",
+   note:"Founder's [[4,000]] → 2,340 to 2,675 firms",
+   alt:"Paper diaries and WhatsApp groups · Procore, Aconex · Causeway", sig:"M&E package awards · new commercial manager · slow-paying main contractors", ev:[4,5],
+   sc:[[5,"S",88,"comments.txt · Call notes"],[4,"S",90,"hubspot_deals · M&E"],[4,"S",84,"hubspot_deals · Lead source"],[5,"M",79,"linkedin_export · Engagers"]],
+   scan:[
+    { t:"1 · M&E: 2,340 firms of 20 to 249 staff", w:["ONS · UK Business 2026 · T4"], f:["def","firms"] },
+    { t:"Top down: £12.5bn of work by firms of 20 to 99 staff; agrees within 5%", w:["ONS · Construction 2025 · T1.5"], f:["val","chk"] },
+    { t:"The founder's [[4,000]] does not hold: 2,340 to 2,675 firms", i:["5 Your market · 5 How many"], w:["ONS · UK Business 2026 · T4"], f:["note"] },
+    { t:"Signals: M&E package awards, slow-paying main contractors", w:["Contracts Finder","Check payment practices"], f:["alt","sig","conf"] }],
+   score:[
+    { t:"1 · M&E: pain 5, a lost variation is why pilots said yes", i:["comments.txt · Call notes"] },
+    { t:"Willing to pay 4: four paying pilots, none at full price yet", i:["hubspot_deals · M&E"] },
+    { t:"Referrals 4, reach 5: two pilots by referral; post engagers are their commercial managers", i:["hubspot_deals · Lead source","linkedin_export · Engagers"] }] },
+ { n:"Drylining and interiors", def:"SIC 43.31, 43.39 · mapping a judgement", firms:"275", val:"£2.0m", chk:"≈ 30%", ck:"mid", conf:"medium",
+   alt:"Paper day sheets and WhatsApp · Procore, Aconex · Simpro, Joblogic", sig:"Fit-out package awards · growth past 20 staff · finishing-trade disputes", ev:[2,3],
+   sc:[[4,"D",62,"Domain · fit-out margins"],[3,"S",80,"hubspot_deals · Drylining"],[2,"D",50,"Domain · trade networks"],[3,"M",60,"linkedin_export · Engagers"]],
+   scan:[
+    { t:"2 · Drylining: 275 firms, up to 705 if joinery counts", w:["ONS · UK Business 2026 · T4"], f:["def","firms"] },
+    { t:"Top down agrees within 30%; the trade code holds other finishers", w:["ONS · Construction 2025 · T1.5"], f:["val","chk","alt","sig","conf"] }],
+   score:[{ t:"2 · Drylining: one pilot; one firm went quiet after the price", i:["hubspot_deals · Drylining"] }] },
+ { n:"Fire protection", def:"Across SIC 43.21, 43.22, 43.29, 43.99", firms:"≈250", val:"£1.8m", chk:"≈ share", ck:"mid", conf:"low",
+   alt:"Paper certificates and WhatsApp photos · Joblogic, Simpro · contractor platforms", sig:"BAFE and FIRAS registrations · remediation awards · new contracts managers", ev:[2,4],
+   sc:[[4,"M",66,"5 Your market · 1 Who needs it most"],[3,"S",78,"hubspot_deals · Fire protection"],[2,"D",48,"Domain · certification bodies"],[2,"D",52,"Scan · about 250 firms"]],
+   scan:[
+    { t:"3 · Fire protection: no official count; about 250 firms, estimated", w:["BAFE · SP203 register","ASFP · members"], f:["def","firms"] },
+    { t:"Top down rests on an assumed 5 to 10% share of four trades", w:["ONS · Construction 2025 · T1.5"], f:["val","chk","alt","sig","conf"] }],
+   score:[{ t:"3 · Fire protection: one pilot, from the trade show; small and hard to reach", i:["hubspot_deals · Fire protection"] }] },
+ { n:"Groundworks", def:"SIC 43.12 + part of 42.99, 42.11", firms:"≈453", val:"£3.2m", chk:"≈ +44%", ck:"mid", conf:"low",
+   alt:"Paper day sheets, plant timesheets, WhatsApp · Causeway · plant apps", sig:"Enabling-works awards · large housing starts · plant charges filed", ev:[3,3],
+   sc:[[4,"M",64,"5 Your market · 1 Who needs it most"],[1,"S",85,"hubspot_deals · Groundworks"],[1,"S",80,"hubspot_deals · Groundworks"],[3,"D",50,"Scan · about 453 firms"]],
+   scan:[
+    { t:"4 · Groundworks: about 453 firms, from a 40% share of civils", w:["ONS · UK Business 2026 · T4"], f:["def","firms"] },
+    { t:"Top down runs 44% above bottom up; both rest on that share", w:["ONS · Construction 2025 · T1.5"], f:["val","chk","alt","sig","conf"] }],
+   score:[{ t:"4 · Groundworks: both pilots ended when foremen stopped sending notes", i:["hubspot_deals · Groundworks"] }] },
+ { n:"Scaffolding", def:"SIC 43.99/1 · scaffold erection", firms:"160–320", val:"£1.2m", chk:"≈ 30%", ck:"mid", conf:"low",
+   alt:"Paper registers and handover certificates · WhatsApp photos · scaffold job apps", sig:"NASC membership · package extensions · headcount growth", ev:[1,3],
+   sc:[[2,"M",60,"5 Your market · 1 Who needs it most"],[2,"D",45,"Domain · small sums per change"],[2,"D",45,"Domain · trade networks"],[2,"D",50,"Scan · NASC directory"]],
+   scan:[
+    { t:"5 · Scaffolding: 160 to 320 firms in the size band", w:["ONS · Construction 2025 · T3.2"], f:["def","firms"] },
+    { t:"Top down agrees within 30%; trade body counts over 950 members", w:["ONS · Construction 2025 · T1.5","NASC · members"], f:["val","chk","alt","sig","conf"] }],
+   score:[{ t:"5 · Scaffolding: no conversations yet; small sums per change", i:["kickoff_board · Segments"] }] },
+ { n:"Social-housing repairs", def:"Across SIC 41.20, 43.21, 43.39, 43.99", firms:"≈250", val:"£1.8m", chk:"≈ 20%", ck:"mid", conf:"low",
+   alt:"Landlord repairs systems, Kirona · paper job sheets · WhatsApp", sig:"Framework awards · Awaab's Law deadlines · re-procurements", ev:[1,3],
+   sc:[[3,"M",58,"5 Your market · 1 Who needs it most"],[2,"D",46,"Domain · landlord procurement"],[2,"D",44,"Domain · framework buying"],[2,"D",48,"Domain · frameworks, not people"]],
+   scan:[
+    { t:"6 · Social housing: no list exists; about 250 firms, estimated", f:["def","firms"] },
+    { t:"£8.7bn of public housing repairs a year, about £1,900 a home", w:["ONS · Construction 2025 · T1.4","RSH · stock 2024/25"], f:["val","chk","alt","sig","conf"] }],
+   score:[{ t:"6 · Social housing: one conversation, no reply; landlords buy through frameworks", i:["hubspot_deals · Social housing"] }] }
+];
+const SIZE_ORDER = [0, 3, 1, 2, 5, 4];          // by firms in band
+const bh = k => SEG[k].sc.reduce((a, s) => a + s[0], 0);
+const BH_ORDER = [0, 1, 2, 3, 4, 5].sort((a, b) => bh(b) - bh(a) || SIZE_ORDER.indexOf(a) - SIZE_ORDER.indexOf(b));
+
+const INPUTS = [
+  ["kickoff_board_2026-11-14.pdf","PDF","3.2 MB"],
+  ["briefing_onepager.md","MD","9 KB"],
+  ["product_memory_v1.md","MD","24 KB"],
+  ["readiness_scorecard_v0.csv","CSV","4 KB"],
+  ["intake_answers.json","JSON","61 KB"],
+  ["hubspot_deals_2026-11-14.csv","CSV","180 KB"],
+  ["intake_materials/ · 5 files","DIR","5.3 MB"],
+  ["gtm_playbook_library","LIB","7 motions"]
+];
+const READING = [
+  "Reading kickoff_board_2026-11-14.pdf · goal, limits, canvas, positioning, product status, segments",
+  "Reading briefing_onepager.md · gaps, unsourced claims, contradictions",
+  "Reading product_memory_v1.md · features, proof, price",
+  "Reading readiness_scorecard_v0.csv · six checks, first score",
+  "Reading intake_answers.json · 47 answers with origin and confidence",
+  "Reading hubspot_deals_2026-11-14.csv · 25 conversations by segment",
+  "Reading intake_materials/ · call notes, marketing report, LinkedIn export",
+  "Loading gtm_playbook_library · 7 motions, 52 plays"
+];
+const READ_TXT = "8 inputs read · Kickoff board, briefing, product memory, scorecard, intake answers, CRM export, intake materials, playbook library";
+const PLAN = [
+  { t:"Six candidate segments from the Kickoff's market slicing", i:["kickoff_board · Segments"] },
+  { t:"All six pass same problem and can we list them; same message weakest for social housing", i:["kickoff_board · Segments"] },
+  { t:"The job: get a changed instruction on record before the notice deadline", i:["kickoff_board · Positioning"] },
+  { t:"Each card runs the checks an incubator makes before a segments session" },
+  { t:"Size bottom up: firms × [[4]] sites × [[£149]] a month", i:["product_memory · Price"] },
+  { t:"…cross-checked top down from each trade's output, in official statistics" },
+  { t:"Alternatives as buyers see them", i:["kickoff_board · Positioning"] },
+  { t:"Buying signals from the moments of need", i:["5 Your market · 3 Moment of need"] },
+  { t:"Claim to test: the founder's [[4,000]] M&E firms", i:["briefing · Unsourced claims"] }
+];
+const SCAN_END = [
+  { t:"18 sources cited · 7 estimates marked as estimates" },
+  { t:"Report behind Discuss segments updated" }
+];
+const SCORE_HEAD = { t:"Scoring on the early customer profile: pain, willingness to pay, referrals, reach" };
+const SCORE_END = { t:"Beachhead scores ready: the four scores combined, out of 20" };
+const SUM = {
+  scan:{ stats:[[6,"","segments scanned, sized two ways"],[18,"","public sources; 7 estimates marked"],[2340,"","M&E firms; the founder's [[4,000]] corrected"]],
+         call:"Every figure is sourced or marked as an estimate; the segments report is updated.", small:"Score next" },
+  score:{ stats:[[18," / 20","Beachhead score: M&E subcontractors"],[6,"","points clear of the next segment"],[5," / 5","reach: its buyers engage with the posts"]],
+         call:"Scored on pain, willingness to pay, referrals and reach; every score sourced.", small:"Sort to rank" }
+};
+
+/* The reach explanation (beat 6) and the motion match (beat 7) */
+const REACH = { text:"Most people commenting on the founder's LinkedIn posts are commercial managers and quantity surveyors at M&E subcontractors, and the founder knows about [[200]] of them in the North West. <strong>These buyers are reachable on LinkedIn.</strong>", src:"linkedin_export · Engagers; 1 Your goals · 6 Strengths" };
+const MATCH_LOG = [
+  "Library · 7 GTM motions, 52 plays",
+  "Reading marketing_report_2026_Q1-Q2.pdf · Channels",
+  "Reading linkedin_export_2026-11-12.csv · Posts, reactions",
+  "Content · LinkedIn engagement history — <b class='fit f-s'>STRONG FIT</b>",
+  "Partnerships · referrals convert best — <b class='fit f-f'>FIT</b>",
+  "Community · one trade show, one customer — <b class='fit f-w'>WEAK FIT</b>",
+  "Outbound · cold email brought no customers — <b class='fit f-w'>WEAK FIT</b>",
+  "ABM and paid ads · never tried — <b class='fit f-n'>NO EVIDENCE</b>",
+  "RevOps · supports selling, not a route — <b class='fit f-n'>NO EVIDENCE</b>",
+  "AI search · nothing on how buyers search — <b class='fit f-n'>NO EVIDENCE</b>"
+];
+const MOTIONS = [   // pill, fit class, fit label (3-segment-rank/TASK.md, "Motion pills for Lintel")
+  ["Founder-led social selling", "s", "Strong fit"],
+  ["Warm-intro flywheel", "f", "Fit"],
+  ["Community-led growth", "w", "Weak fit"],
+  ["Signal-stacked outbound", "w", "Weak fit"],
+  ["Account-based dark-funnel plays", "n", "No evidence"],
+  ["Revenue engine orchestration", "n", "No evidence"],
+  ["AI-search share of voice (AEO)", "n", "No evidence"]
+];
+const CITE = { q:"\"Posts on unpaid extra work average [[40]] reactions and [[15]] comments each, three times the rest.\"", src:"marketing_report_2026_Q1-Q2.pdf · Channels", gap:"No information on any follow-up of these comments and likes." };
+
+/* ---------- helpers (as intake) ---------- */
+const $ = id => document.getElementById(id);
+let paused = false, pauseStart = 0, pausedTotal = 0, frozen = [];
+const now = () => (paused ? pauseStart : performance.now()) - pausedTotal;
+const SLOW = 1.25;   // the whole script runs 25% slower than first built
+const sleep = ms => new Promise(res => { const end = now() + ms * SLOW;
+  const tick = () => { const left = end - now(); if (left <= 0 && !paused) res(); else setTimeout(tick, paused ? 50 : Math.max(1, left)); };
+  tick(); });
+function setPaused(on) {
+  if (on === paused) return;
+  if (on) { paused = true; pauseStart = performance.now();
+    frozen = document.getAnimations().filter(a => a.playState === "running"); frozen.forEach(a => a.pause());
+    document.body.classList.add("blur-answers"); }
+  else { pausedTotal += performance.now() - pauseStart; paused = false; frozen.forEach(a => a.play()); frozen = [];
+    document.body.classList.remove("blur-answers"); }
+}
+const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const rich = t => esc(t).replace(/\[\[(.+?)\]\]/g,'<span class="hush">$1</span>');
+const parts = t => t.split(/(\[\[.+?\]\])/).filter(Boolean).map(p => p.startsWith("[[") ? { t:p.slice(2,-2), k:"s" } : { t:p, k:null });
+
+const stage = $("stage"), scroller = $("scroller"), cursor = $("cursor");
+stage.appendChild($("popCard"));
+const flags = new Set(location.hash.replace("#","").split("-").filter(Boolean));
+if (flags.has("rec")) document.body.classList.add("rec");
+if (flags.has("answers")) document.body.classList.add("blur-answers");
+
+let scale = 1;
+function fit() {
+  const vp = $("viewport"), W = vp.clientWidth, H = vp.clientHeight;
+  scale = Math.min(W / 960, H / 540);
+  stage.style.transform = `translate(${(W - 960*scale)/2}px, ${(H - 540*scale)/2}px) scale(${scale})`;
+}
+addEventListener("resize", fit); fit();
+
+/* ---------- render ---------- */
+const state = { phase:"initial", running:false, scanned:0 };
+const emptyTxt = '<span class="empty">—</span>';
+function card(k) {
+  const s = SEG[k];
+  return `<article class="card" id="card-${k}">
+    <div class="c-head"><span class="c-num">${k+1}</span>
+      <div><div class="c-title">${esc(s.n)}</div><div class="c-def ans" data-f="def">From intake · not scanned yet</div></div>
+      <span class="c-conf" data-f="conf" style="visibility:hidden">low</span></div>
+    <div class="c-stats">
+      <div><div class="st-l">Firms</div><div class="st-v" data-f="firms">${emptyTxt}</div></div>
+      <div><div class="st-l">£ a year</div><div class="st-v" data-f="val">${emptyTxt}</div></div>
+      <div><div class="st-l">Top down</div><div class="st-v small" data-f="chk">${emptyTxt}</div></div>
+    </div>
+    ${s.note ? `<div class="c-note ans" data-f="note" style="display:none"></div>` : ""}
+    <div class="c-row"><span class="st-l">Alternatives</span><span class="c-txt ans" data-f="alt">${emptyTxt}</span></div>
+    <div class="c-row"><span class="st-l">Signals</span><span class="c-txt ans" data-f="sig">${emptyTxt}</span></div>
+    <div class="c-scores">${SC_LABEL.map((l, j) => `<div class="sc" id="sc-${k}-${j}"><div class="sc-top"><span class="sc-l">${l}</span><span class="sc-c"></span></div>
+      <div class="sc-mid"><span class="sc-v">–</span><span class="pips">${"<i></i>".repeat(5)}</span></div><div class="sc-s"></div></div>`).join("")}</div>
+    <div class="c-foot">
+      <span class="c-ev"><span class="ev-l">Evidence</span> <b id="ev-${k}">0</b> ▸</span>
+      <span class="c-bh"><span class="tag">Top pick</span>Beachhead <b id="bh-${k}">–</b>/20</span>
+    </div>
+  </article>`;
+}
+function render() {
+  $("cards").innerHTML = SEG.map((_, k) => `<div class="ghost" id="ghost-${k}"><i style="width:34%"></i><i style="width:62%"></i><i style="width:48%"></i></div>`).join("");
+  $("files").innerHTML = INPUTS.map(([n, ext, size], k) => `
+    <div class="file" id="file-${k}"><span class="ficon">${ext}</span>
+      <div class="fmeta"><div class="fname">${esc(n)}</div><div class="fsize">${size}</div></div>
+      <span class="ring" id="ring-${k}"><svg class="arc" viewBox="0 0 20 20"><circle class="t" cx="10" cy="10" r="8" fill="none" stroke-width="2"/><circle class="p" cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg>
+      <span class="ok"><svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="#00131d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span></span>
+    </div>`).join("");
+  $("menu").innerHTML = `<div class="mi cur" data-s="size">Market size <small></small></div><div class="mi-sep"></div>`
+    + SC_LABEL.map((l, j) => `<div class="mi" data-s="${j}">${j === 1 ? "Willingness to pay" : l}</div>`).join("")
+    + `<div class="mi-sep"></div><div class="mi" data-s="bh" id="miBh">Beachhead score <small>all combined</small></div>`;
+}
+render();
+
+/* a ghost slot becomes the segment's card when the scan finds it */
+function materialize(k, instant) {
+  const g = $("ghost-" + k); if (!g) return;
+  g.outerHTML = card(k);
+  if (!instant) $("card-" + k).classList.add("born");
+}
+/* card fields */
+function reveal(k, keys, instant) {
+  const s = SEG[k], el = $("card-" + k);
+  for (const f of keys) {
+    const node = el.querySelector(`[data-f="${f}"]`); if (!node) continue;
+    if (f === "conf") { node.className = "c-conf " + s.conf; node.textContent = s.conf; node.style.visibility = ""; }
+    else if (f === "chk") { node.className = "st-v small " + s.ck; node.textContent = s.chk; }
+    else if (f === "note") { node.style.display = ""; node.innerHTML = rich(s.note); }
+    else node.innerHTML = rich(s[f]);
+    if (!instant) { node.classList.remove("f-in"); void node.offsetWidth; node.classList.add("f-in"); }
+  }
+}
+function setScore(k, j, instant) {
+  const [v, o, c, src] = SEG[k].sc[j], el = $(`sc-${k}-${j}`);
+  el.className = "sc f " + o;
+  el.querySelector(".sc-v").textContent = v;
+  el.querySelectorAll(".pips i").forEach((p, n) => p.classList.toggle("on", n < v));
+  el.querySelector(".sc-c").textContent = c + "%";
+  el.querySelector(".sc-s").textContent = src;
+  if (!instant) { void el.offsetWidth; el.classList.add("pop"); }
+}
+function setBh(k) { $("bh-" + k).textContent = bh(k); }
+
+/* ---------- cursor (as intake) ---------- */
+let cx = 560, cy = 470;
+function posOf(el, fx = .5, fy = .5) {
+  const sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return [(r.left - sr.left + r.width*fx) / scale, (r.top - sr.top + r.height*fy) / scale];
+}
+function placeCursor(x, y) { cx = x; cy = y; cursor.style.transition = "opacity .3s"; cursor.style.transform = `translate(${x}px,${y}px)`; }
+async function showCursor() { cursor.style.opacity = 1; await sleep(300); }
+async function moveTo(el, fx, fy, dur) {
+  const [x, y] = posOf(el, fx, fy), d = Math.hypot(x - cx, y - cy);
+  dur = dur ?? Math.min(1050, Math.max(420, d * 1.5));
+  cursor.style.transition = `opacity .3s, transform ${dur * SLOW}ms cubic-bezier(.45,.05,.25,1)`;
+  cursor.style.transform = `translate(${x}px,${y}px)`;
+  cx = x; cy = y;
+  await sleep(dur + 80);
+}
+async function click(el) {
+  const r = document.createElement("span"); r.className = "ripple";
+  r.style.left = cx + 1 + "px"; r.style.top = cy + 1 + "px"; stage.appendChild(r);
+  setTimeout(() => r.remove(), 600);
+  el && el.classList.add("pressed"); await sleep(150); el && el.classList.remove("pressed"); await sleep(130);
+}
+function scrollToY(y, dur) {
+  y = Math.max(0, Math.min(y, scroller.scrollHeight - scroller.clientHeight));
+  return new Promise(res => {
+    const y0 = scroller.scrollTop, t0 = now(); dur *= SLOW;
+    if (Math.abs(y - y0) < 2) return res();
+    const f = () => { const p = Math.min(1, (now() - t0) / dur), e = p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2;
+      scroller.scrollTop = y0 + (y - y0) * e; p < 1 ? requestAnimationFrame(f) : res(); };
+    requestAnimationFrame(f);
+  });
+}
+const offsetIn = el => (el.getBoundingClientRect().top - scroller.getBoundingClientRect().top) / scale + scroller.scrollTop;
+async function scrollToCard(k, dur = 700) {
+  const el = $("card-" + k), top = offsetIn(el), h = el.offsetHeight, view = scroller.clientHeight, cur = scroller.scrollTop;
+  if (top >= cur && top + h <= cur + view) return;
+  await scrollToY(top - 4, dur);
+}
+
+/* ---------- streaming (as intake: a ticker of whole lines; here each line carries its citations) ---------- */
+const pinH = () => $("pin").offsetHeight;
+async function scrollToCard(k, dur = 700) {
+  const el = $("card-" + k), top = offsetIn(el), h = el.offsetHeight, cur = scroller.scrollTop, view = scroller.clientHeight, ph = pinH();
+  if (top >= cur + ph && top + h <= cur + view) return;
+  await scrollToY(top - ph - 8, dur);
+}
+const toList = (dur = 700) => scrollToY(offsetIn($("listHead")) - pinH() - 2, dur);
+function ticker(it) {
+  const t = $("ticker"), line = document.createElement("div");
+  const cites = [...(it.i || []).map(c => `<span class="chip in">${esc(c)}</span>`), ...(it.w || []).map(c => `<span class="chip web">${esc(c)}</span>`)].join("");
+  line.className = "tl now";
+  line.innerHTML = `<span class="tl-t">${rich(it.t)}</span>${cites ? `<span class="tl-c">${cites}</span>` : ""}`;
+  [...t.children].forEach(n => n.classList.remove("now"));
+  t.appendChild(line);
+  const kids = [...t.children];
+  kids.forEach((n, k) => { n.classList.remove("old1", "old2", "old3"); const age = kids.length - 1 - k; if (age >= 1 && age <= 3) n.classList.add("old" + age); });
+  while (t.children.length > 5) t.firstChild.remove();
+}
+const fmt = n => n.toLocaleString("en-GB");
+function countUp(el, to, dur) {
+  const t0 = now(), from = +String(el.textContent).replace(/,/g, "") || 0; dur *= SLOW;
+  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur); el.textContent = fmt(Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)))); p < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
+}
+function ring(k, dur) {
+  const c = $("ring-" + k).querySelector(".p"), L = 50.27, t0 = now(); dur *= SLOW;
+  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur); c.style.strokeDashoffset = L * (1 - (1 - Math.pow(1 - p, 2)));
+    if (p < 1) requestAnimationFrame(f); else { $("ring-" + k).classList.add("done"); res(); } }; requestAnimationFrame(f); });
+}
+function setSummary(kind, animate) {
+  const S = SUM[kind];
+  $("stats").innerHTML = S.stats.map((x, i) => `<div class="stat"><div class="stat-num"><span id="sn${i}">${animate ? 0 : fmt(x[0])}</span><small>${x[1]}</small></div><div class="stat-lbl">${rich(x[2])}</div></div>`).join("");
+  $("callout").innerHTML = `<span>${esc(S.call)}</span><small>${esc(S.small)}</small>`;
+  if (animate) return Promise.all(S.stats.map((x, i) => countUp($("sn" + i), x[0], 1100)));
+}
+function showSummary() { $("tickerFold").classList.remove("open"); $("summaryFold").classList.add("open"); }
+function showTicker() { $("summaryFold").classList.remove("open"); $("ticker").innerHTML = ""; $("tickerFold").classList.add("open"); }
+
+/* FLIP reorder of the cards */
+async function reorder(order, instant) {
+  const els = order.map(k => $("card-" + k));
+  const first = new Map(els.map(e => [e, e.getBoundingClientRect()]));
+  els.forEach(e => $("cards").appendChild(e));
+  if (instant) return;
+  els.forEach(e => { const a = first.get(e), b = e.getBoundingClientRect(), dx = (a.left - b.left) / scale, dy = (a.top - b.top) / scale;
+    if (dx || dy) e.animate([{ transform:`translate(${dx}px,${dy}px)` }, { transform:"none" }], { duration:850 * SLOW, easing:"cubic-bezier(.2,.7,.2,1)" }); });
+  await sleep(900);
+}
+function setSort(key, label) {
+  $("sortLbl").textContent = label;
+  $("menu").querySelectorAll(".mi").forEach(m => m.classList.toggle("cur", m.dataset.s === key));
+}
+
+/* ---------- instant states (for the start flags) ---------- */
+function panelInstant() {
+  $("pin").classList.add("on"); $("panel").classList.add("open");
+  $("filesFold").classList.remove("open"); $("readTxt").textContent = READ_TXT; $("readFold").classList.add("open");
+  showSummary();
+}
+function scannedInstant() {
+  panelInstant(); setSummary("scan");
+  SEG.forEach((s, k) => { materialize(k, true); s.scan.forEach(it => reveal(k, it.f, true)); $("ev-" + k).textContent = s.ev[0] + s.ev[1]; });
+  $("scanned").textContent = 6; btnDone(); $("toolbar").classList.add("show");
+  setSort("size", "Market size"); reorder(SIZE_ORDER, true);
+  state.phase = "scanned";
+}
+function scoredInstant() {
+  scannedInstant();
+  SIZE_ORDER.forEach(k => { SEG[k].sc.forEach((_, j) => setScore(k, j, true)); setBh(k); });
+  setSummary("score"); scoreDone(); state.phase = "scored";
+}
+function btnDone() { $("btnGo").classList.add("done"); $("btnGoLabel").textContent = "6 segments scanned"; }
+function scoreDone() { $("bScore").classList.add("done"); $("bScoreL").textContent = "Scored"; $("upd").classList.add("on"); }
+
+/* ---------- Beat 3: read the inputs, plan, scan ---------- */
+async function beatScan() {
+  placeCursor(600, 470); await showCursor(); await sleep(300);
+  const btn = $("btnGo");
+  await moveTo(btn, .5, .55); await click(btn);
+  $("btnGoLabel").textContent = "Reading inputs…";
+  $("pin").classList.add("on"); $("panel").classList.add("open"); await sleep(420);
+  ticker({ t:`Loading ${INPUTS.length} inputs from the work so far` });
+  const rings = [];
+  for (let k = 0; k < INPUTS.length; k++) { $("file-" + k).classList.add("in"); rings.push(ring(k, 900 + k * 180)); await sleep(190); }
+  await moveTo(btn, .5, 2.6, 700);
+  await Promise.all(rings); await sleep(250);
+  for (const m of READING) { ticker({ t:m }); await sleep(600); }
+  $("filesFold").classList.remove("open"); $("readTxt").textContent = READ_TXT; $("readFold").classList.add("open");
+  await sleep(500);
+  await scrollToY(offsetIn($("pin")), 800);
+  $("btnGoLabel").textContent = "Planning…";
+  for (const it of PLAN) { ticker(it); await sleep(1000); }
+  for (let k = 0; k < SEG.length; k++) {
+    $("btnGoLabel").textContent = `Researching ${k+1} of 6…`;
+    materialize(k);
+    await scrollToCard(k);
+    const el = $("card-" + k); el.classList.add("active");
+    await sleep(350);
+    const s = SEG[k], per = s.scan.length;
+    const ev = countUp($("ev-" + k), s.ev[0] + s.ev[1], per * 1100);
+    for (const it of s.scan) { ticker(it); reveal(k, it.f); await sleep(1050); }
+    await ev;
+    el.classList.remove("active");
+    $("scanned").textContent = ++state.scanned;
+    await sleep(200);
+  }
+  for (const it of SCAN_END) { ticker(it); await sleep(900); }
+  btnDone();
+  showSummary(); await sleep(300);
+  await setSummary("scan", true);
+  $("toolbar").classList.add("show"); $("upd").classList.add("on");
+  await sleep(1400);
+  await toList(800);
+  setSort("size", "Market size");
+  await reorder(SIZE_ORDER);
+  await sleep(900);
+  state.phase = "scanned";
+}
+
+/* ---------- Beat 4: score ---------- */
+async function beatScore() {
+  if (cursor.style.opacity !== "1") { placeCursor(640, 470); await showCursor(); }
+  await toList(600);
+  $("upd").classList.remove("on");
+  const b = $("bScore");
+  await moveTo(b, .5, .55); await click(b);
+  b.classList.add("done"); $("bScoreL").textContent = "Scoring…";
+  await moveTo(b, .5, 3.5, 600);
+  showTicker(); await sleep(500);
+  ticker(SCORE_HEAD); await sleep(1000);
+  for (const k of SIZE_ORDER) {
+    await scrollToCard(k, 600);
+    const el = $("card-" + k); el.classList.add("active");
+    const lines = SEG[k].score;
+    for (let j = 0; j < 4; j++) {
+      if (j < lines.length) { ticker(lines[j]); await sleep(700); }
+      setScore(k, j); await sleep(lines.length > 1 ? 260 : 200);
+    }
+    setBh(k); await sleep(260);
+    el.classList.remove("active");
+  }
+  ticker(SCORE_END); await sleep(1000);
+  showSummary(); await sleep(300);
+  await setSummary("score", true);
+  scoreDone();
+  await sleep(1200);
+  state.phase = "scored";
+}
+
+/* ---------- Beat 5: sort by Beachhead score ---------- */
+async function beatSort() {
+  if (cursor.style.opacity !== "1") { placeCursor(640, 470); await showCursor(); }
+  await toList(700);
+  const sb = $("bSort");
+  await moveTo(sb, .5, .55); await click(sb);
+  $("menu").classList.add("open"); await sleep(700);
+  const items = [...$("menu").querySelectorAll(".mi")];
+  for (const m of items) { await moveTo(m, .4, .5, 170); m.classList.add("hover"); await sleep(120); if (m.id !== "miBh") m.classList.remove("hover"); else break; }
+  await sleep(350);
+  await click($("miBh"));
+  $("menu").classList.remove("open"); $("miBh").classList.remove("hover");
+  setSort("bh", "Beachhead score");
+  await moveTo($("cards"), .75, .3, 600);
+  await reorder(BH_ORDER);
+  await toList(500);
+  $("card-" + BH_ORDER[0]).classList.add("top");
+  await sleep(1500);
+  state.phase = "sorted";
+}
+
+/* ---------- Beat 6: the top segment's reach score ---------- */
+async function beatReach() {
+  const k = BH_ORDER[0], cell = $(`sc-${k}-3`), [v, o, c] = SEG[k].sc[3];
+  await moveTo(cell, .5, .45); await click(cell);
+  cell.classList.add("hot");
+  const pc = $("popCard");
+  pc.innerHTML = `<div class="pc-top"><span class="label">Reach · ${esc(SEG[k].n)}</span><span class="pc-v">${v}<small> / 5</small></span></div>
+    <div class="pc-text ans">${REACH.text.replace(/\[\[(.+?)\]\]/g, '<span class="hush">$1</span>')}</div>
+    <div class="pc-meta"><span class="pill ${o}">Material-inferred</span><span class="conf"><i style="--v:${c/100}"></i>${c}%</span><span class="p-src">${esc(REACH.src)}</span></div>`;
+  const [x, y] = posOf(cell, 1, 0), [x0] = posOf(cell, 0, 0);
+  if (x + 262 <= 960) { pc.style.left = x + 10 + "px"; pc.style.top = Math.max(60, y - 70) + "px"; }
+  else { pc.style.left = Math.max(x0 - 140, x - 252) + "px"; pc.style.top = Math.max(12, y - pc.offsetHeight - 8) + "px"; }
+  pc.classList.add("open");
+  await moveTo(cell, .7, .9, 400);
+  await sleep(3800);
+  pc.classList.remove("open"); cell.classList.remove("hot");
+  await sleep(400);
+}
+
+/* ---------- Beat 7: open the pick, match GTM playbooks ---------- */
+function fillDrawer(k) {
+  const s = SEG[k];
+  $("dNum").textContent = k + 1;
+  $("dTitle").textContent = s.full || s.n;
+  $("dBh").innerHTML = `${bh(k)}<small>/ 20</small>`;
+  $("dScores").innerHTML = s.sc.map((x, j) => `<span>${SC_LABEL[j]} <b class="${x[1]}">${x[0]}</b></span>`).join("");
+  $("dLine").textContent = `${s.firms} firms · buyers reachable on LinkedIn`;
+}
+function mLine(html) {
+  const t = $("mTicker"), line = document.createElement("div");
+  line.className = "ml now"; line.innerHTML = html;
+  [...t.children].forEach(n => n.classList.remove("now"));
+  t.appendChild(line);
+  const kids = [...t.children];
+  kids.forEach((n, i) => { n.classList.remove("o1", "o2", "o3"); const age = kids.length - 1 - i; if (age >= 1 && age <= 3) n.classList.add("o" + age); });
+  while (t.children.length > 5) t.firstChild.remove();
+}
+async function beatMatch() {
+  const k = BH_ORDER[0], title = $("card-" + k).querySelector(".c-title");
+  await moveTo(title, .3, .5); await click(title);
+  fillDrawer(k);
+  $("scrim").classList.add("open"); $("drawer").classList.add("open");
+  await sleep(900);
+  const bp = $("bPlay");
+  await moveTo(bp, .5, .55); await click(bp);
+  bp.classList.add("done"); $("bPlayL").textContent = "Matching against the library…";
+  await moveTo(bp, .85, 3.4, 600);
+  for (const l of MATCH_LOG) { mLine(l); await sleep(l.includes("STRONG") ? 1300 : 560); }
+  await sleep(500);
+  $("bPlayL").textContent = "7 motions matched";
+  $("bFold").classList.remove("open"); $("mFold").classList.remove("open"); $("gFold").classList.add("open");
+  const list = $("gList"); list.innerHTML = "";
+  for (let i = 0; i < MOTIONS.length; i++) {
+    const [name, cls, fitL] = MOTIONS[i];
+    const row = document.createElement("div"); row.className = "gp";
+    row.innerHTML = `<span class="gpill ${cls}">${esc(name)}</span><span class="fit-tag f-${cls}">${fitL}</span>`;
+    list.appendChild(row); void row.offsetWidth; row.classList.add("in");
+    if (i === 0) {
+      await sleep(500);
+      const d = document.createElement("div"); d.className = "gp-detail f-in";
+      d.innerHTML = `<div class="cite ans">${rich(CITE.q)}</div><div class="cite-src">${esc(CITE.src)}</div><div class="gap">${esc(CITE.gap)}</div>`;
+      list.appendChild(d);
+      await sleep(2200);
+    } else await sleep(260);
+  }
+  await sleep(3200);
+  state.phase = "done";
+}
+
+/* ---------- screencast tabs ---------- */
+const PAGE = "segments.html";
+const STEPS = [
+  ["Intake", "intake.html", true],
+  ["Segments", "segments.html", true],
+  ["Voice clone", "voice-clone.html", false],
+  ["Posts to meetings", "posts-to-meetings.html", false]
+];
+$("steps").innerHTML = STEPS.map(([name, file, built], k) => built
+  ? `<a class="step${file === PAGE ? " on" : ""}" href="${file}"${file === PAGE ? ' aria-current="page"' : ""}><span class="n">${k+1}</span>${name}</a>`
+  : `<span class="step off" title="Not built yet"><span class="n">${k+1}</span>${name}</span>`).join("");
+$("steps").addEventListener("click", e => {
+  const a = e.target.closest("a.step"); if (!a) return;
+  e.preventDefault();
+  const file = a.getAttribute("href");
+  if (file === PAGE) { restart(); return; }
+  const keep = [...flags].filter(f => !["auto", "scanned", "scored"].includes(f)).join("-");
+  location.href = file + (keep ? "#" + keep : "");
+});
+
+/* ---------- controls ---------- */
+async function play() {
+  if (state.running) { setPaused(!paused); return; }
+  if (state.phase === "done") return;
+  state.running = true; $("hint").classList.add("mini");
+  document.body.classList.remove("blur-answers");
+  try {
+    if (state.phase === "initial") { await beatScan(); await sleep(800); }
+    if (state.phase === "scanned") { await beatScore(); await sleep(600); }
+    if (state.phase === "scored") await beatSort();
+    if (state.phase === "sorted") { await beatReach(); await beatMatch(); }
+    cursor.style.opacity = 0;
+    document.body.classList.add("blur-answers");
+  } finally { state.running = false; }
+}
+function restart(extra) {
+  const f = new Set(flags); ["auto", "scanned", "scored"].forEach(x => f.delete(x)); if (extra) f.add(extra);
+  location.hash = [...f].join("-"); location.reload();
+}
+addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); play(); }
+  else if (e.key === "1") restart();
+  else if (e.key === "2") restart("scanned");
+  else if (e.key === "3") restart("scored");
+  else if (e.key === "b" || e.key === "B") document.body.classList.toggle("blur-answers");
+});
+$("hint").addEventListener("click", play);
+setTimeout(() => $("hint").classList.add("mini"), 2500);
+$("btnGo").addEventListener("click", () => { if (state.phase === "initial") play(); });
+
+if (flags.has("scored")) scoredInstant();
+else if (flags.has("scanned")) scannedInstant();
+if (flags.has("auto")) setTimeout(play, 1500);
+})();
+</script>

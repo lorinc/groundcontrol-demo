@@ -1,0 +1,787 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Liftoff Intake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<!--
+  Screencast 1 of 4: Intake. Scripted playback, recorded at 1920x1080.
+  Blur: names and numbers always; whole answers too while paused or after the end (SCOPE.md, "Show the system").
+  Keys: Space or Enter = play, and pause / resume while playing · 1 = restart · 2 = jump to beat 2 · B = blur whole answers on / off (names and numbers stay blurred)
+  Hash flags (joined by "-"): rec = hide the key hint and edge padding, for recording · auto = play on load · beat2 = start filled · answers = start with whole answers blurred
+  Example for OBS: intake.html#rec-auto
+-->
+<style>
+/* Layout: a fixed 960x540 app stage (the design system's canvas), scaled to the window; rail + scrolling questionnaire + paper conversation drawer. */
+:root {
+  color-scheme: dark;
+  /* GroundControl tokens (reference/groundcontrol/DesignFolder/tokens.css) */
+  --ground:#0e192b; --ground-glow:#152b50; --surface:#13233a; --surface-raised:#1d3a64;
+  --line:#33476c; --line-strong:#6b7889;
+  --ink:#fefeff; --ink-muted:#c4cfe1; --ink-subtle:#97a2b4;
+  --blue:#4c8dff; --blue-light:#8eb4ff; --green:#3ebf80; --on-green:#00131d; --orange:#f2a33b;
+  --paper:#f7f8fc; --paper-raised:#ffffff; --paper-tint:#e8eefe; --paper-line:#ecedf2;
+  --paper-ink:#13213c; --paper-ink-muted:#5b6475; --paper-blue:#2357de;
+  --font-display:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+  --font-sans:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,monospace;
+  /* Answer states, as the beats name them */
+  --st-empty:#e0605a;     /* unanswered */
+  --st-S:#3ebf80;         /* sourced */
+  --st-M:#ead94c;         /* material-inferred */
+  --st-D:#f2a33b;         /* domain-inferred */
+  --st-F:#16804f;         /* founder-written, deep green */
+  /* the same states as text on paper */
+  --pp-S:#17734a; --pp-M:#7a6400; --pp-D:#9a5600;
+}
+html, body { height:100%; }
+body {
+  margin:0; background:var(--ground); overflow:hidden; box-sizing:border-box;
+  padding-block:16px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+body.rec { padding:0; }
+.viewport { position:relative; width:100%; height:100%; }
+
+.stage {
+  position:absolute; left:0; top:0; width:960px; height:540px; transform-origin:0 0; overflow:hidden;
+  display:grid; grid-template-columns:188px minmax(0,1fr);
+  background:radial-gradient(ellipse 55% 75% at 100% 0%, var(--ground-glow), rgba(21,43,80,0) 70%), var(--ground);
+  color:var(--ink); font-family:var(--font-sans);
+}
+button { font:inherit; color:inherit; }
+
+/* Blur: the sample company's names and numbers always. Whole answers blur too when the script pauses or ends; playing clears that. B switches it by hand. */
+.hush { display:inline-block; filter:blur(4.5px); user-select:none; }
+body.blur-answers .q-ans { filter:blur(5px); transition:filter .9s ease; }
+
+/* ---------- Rail ---------- */
+.rail { padding:24px 14px 18px 18px; display:flex; flex-direction:column; gap:22px; border-right:.5px solid var(--line); min-height:0; }
+.brand { font:500 16px/1 var(--font-display); letter-spacing:-.01em; }
+.brand span { display:block; margin-top:8px; font:400 10.5px/1 var(--font-mono); letter-spacing:.18em; color:var(--green); }
+.steps { display:flex; flex-direction:column; gap:4px; }
+.step { display:flex; gap:10px; align-items:center; padding:8px 10px; border-radius:6px; border:1px solid transparent; font:400 12.5px/1.2 var(--font-sans); color:var(--ink-subtle); }
+.step .n { font:400 10.5px/1 var(--font-mono); color:var(--ink-subtle); width:12px; }
+.step.on { background:var(--surface-raised); border-color:var(--blue); color:var(--ink); }
+.step.on .n { color:var(--blue-light); }
+a.step { text-decoration:none; cursor:pointer; transition:background-color .2s, color .2s; }
+a.step:not(.on):hover { background:var(--surface); color:var(--ink-muted); }
+a.step:focus-visible { outline:1px solid var(--blue-light); outline-offset:-1px; }
+.step.off { opacity:.55; }
+.co { margin-top:auto; display:flex; flex-direction:column; gap:5px; padding:12px; border-radius:6px; background:var(--surface); border:.5px solid var(--line); }
+.label { font:400 10px/1.2 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
+.co-name { font:500 15px/1.2 var(--font-display); }
+.co-desc { font:400 11.5px/1.35 var(--font-sans); color:var(--ink-muted); }
+.foot { font:400 10px/1.35 var(--font-mono); color:var(--ink-subtle); }
+
+/* ---------- Main ---------- */
+.main { position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.scroll { flex:1; min-height:0; overflow-y:auto; padding:26px 34px 48px; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+.eyebrow { font:400 11.5px/1.2 var(--font-mono); letter-spacing:.18em; text-transform:uppercase; color:var(--green); }
+h1 { font:500 28px/1.2 var(--font-display); margin:8px 0 0; text-wrap:balance; }
+.sub { font:400 13.5px/1.4 var(--font-sans); color:var(--ink-muted); margin:6px 0 0; }
+.sub b { font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+.btn-go { flex:none; display:inline-flex; align-items:center; gap:8px; padding:11px 14px; border:0; border-radius:5px; background:var(--green); color:var(--on-green); font:500 13px/1 var(--font-display); cursor:pointer; transition:transform .12s, background .3s, color .3s; }
+.btn-go svg { width:14px; height:14px; }
+.btn-go.done { background:var(--surface); color:var(--ink-muted); box-shadow:inset 0 0 0 1px var(--line-strong); cursor:default; }
+.pressed { transform:scale(.96); }
+
+/* collapsible helper */
+.fold { display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1); }
+.fold.open { grid-template-rows:1fr; }
+.fold > div { overflow:hidden; min-height:0; }
+
+/* Upload + processing panel */
+.panel { margin-top:18px; }
+.panel-in { background:var(--surface); border:.5px solid var(--line); border-radius:6px; padding:14px 16px; }
+.files { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:8px 10px; }
+.files .file { grid-column:span 2; }
+.files .file:nth-child(-n+2) { grid-column:span 3; }
+.file { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:5px; background:var(--ground); border:.5px solid var(--line); min-width:0; opacity:0; transform:translateY(8px); transition:opacity .35s, transform .35s; }
+.file.in { opacity:1; transform:none; }
+.ficon { flex:none; width:22px; height:27px; border-radius:3px; background:var(--surface-raised); position:relative; display:grid; place-items:end center; padding-bottom:3px; box-sizing:border-box; font:400 6.5px/1 var(--font-mono); color:var(--blue-light); letter-spacing:.04em; }
+.ficon::before { content:""; position:absolute; top:0; right:0; width:7px; height:7px; background:var(--ground); border-bottom-left-radius:2px; }
+.fmeta { min-width:0; flex:1; }
+.fname { font:400 10.5px/1.2 var(--font-mono); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fsize { font:400 10px/1.2 var(--font-mono); color:var(--ink-subtle); margin-top:3px; }
+.ring { flex:none; width:18px; height:18px; position:relative; }
+.ring svg.arc { width:18px; height:18px; transform:rotate(-90deg); }
+.ring .t { stroke:var(--line); }
+.ring .p { stroke:var(--blue-light); transition:stroke .2s; }
+.ring .ok { position:absolute; inset:0; display:grid; place-items:center; border-radius:50%; background:var(--green); opacity:0; transform:scale(.6); transition:opacity .2s, transform .25s; }
+.ring svg.arc { transition:opacity .2s; }
+.ring.done svg.arc { opacity:0; }
+.ring.done .ok { opacity:1; transform:none; }
+.fmeta { display:block; }
+.fsize { margin-top:3px; white-space:nowrap; }
+
+.ticker { height:57px; margin-top:12px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; }
+.tl { font:400 11px/19px var(--font-mono); color:var(--ink-subtle); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .3s, color .3s; animation:tin .32s cubic-bezier(.2,.7,.2,1); }
+.tl::before { content:"› "; color:var(--line-strong); }
+.tl.now { color:var(--ink-muted); }
+.tl.now::before { color:var(--green); }
+.tl.old1 { opacity:.6; } .tl.old2 { opacity:.3; }
+@keyframes tin { from { transform:translateY(19px); opacity:0; } to { transform:none; opacity:1; } }
+
+.summary { padding-top:14px; }
+.stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:18px; }
+.stat { border-top:1px solid var(--blue); padding-top:9px; }
+.stat-num { font:500 30px/1 var(--font-display); color:var(--blue-light); letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.stat-lbl { display:flex; align-items:center; gap:7px; margin-top:6px; font:400 12px/1.35 var(--font-sans); color:var(--ink-muted); }
+.dot { flex:none; width:8px; height:8px; border-radius:2px; }
+.callout { margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-radius:6px; background:var(--surface-raised); border:1px solid var(--blue); font:500 14px/1.35 var(--font-display); color:var(--ink); }
+.callout small { flex:none; font:400 10.5px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--blue-light); }
+
+/* Chapters */
+.list-head { display:flex; justify-content:space-between; align-items:center; margin:18px 0 9px; }
+.linkbtn { background:none; border:0; padding:4px 0; font:400 12px/1 var(--font-sans); color:var(--ink-muted); cursor:pointer; opacity:0; transition:opacity .4s; }
+.linkbtn.show { opacity:1; }
+.linkbtn:hover, .linkbtn.pressed { color:var(--ink); text-decoration:underline; text-underline-offset:3px; }
+.chapters { display:flex; flex-direction:column; gap:8px; }
+.ch { background:var(--surface); border:.5px solid var(--line); border-radius:6px; }
+.ch-row { all:unset; box-sizing:border-box; width:100%; display:grid; grid-template-columns:18px minmax(0,1fr) 220px 52px 12px; gap:14px; align-items:center; padding:10px 14px; cursor:default; }
+.ch.ready .ch-row { cursor:pointer; }
+.ch-row:focus-visible { outline:1px solid var(--blue); outline-offset:-1px; border-radius:6px; }
+.ch-num { font:400 11px/1 var(--font-mono); color:var(--ink-subtle); }
+.ch-title { font:500 14px/1.2 var(--font-display); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bar { display:flex; gap:3px; height:8px; }
+.seg { flex:1; border-radius:2px; background:var(--st-empty); transition:background-color .3s; }
+.seg.S { background:var(--st-S); } .seg.M { background:var(--st-M); } .seg.D { background:var(--st-D); } .seg.F { background:var(--st-F); }
+.seg.pop { animation:pop .35s ease-out; }
+@keyframes pop { 0% { transform:scaleY(1); } 40% { transform:scaleY(1.7); } 100% { transform:scaleY(1); } }
+.ch-count { font:400 11px/1 var(--font-mono); color:var(--ink-subtle); text-align:right; font-variant-numeric:tabular-nums; }
+.ch-count b { font-weight:400; color:var(--ink); }
+.chev { width:12px; height:12px; color:var(--ink-muted); opacity:.25; transition:transform .3s, opacity .3s; }
+.ch.ready .chev { opacity:1; }
+.ch.open .chev { transform:rotate(90deg); }
+.ch.flash { animation:flash .9s ease-out; }
+@keyframes flash { 0% { border-color:var(--blue); } 100% { border-color:var(--line); } }
+
+.qs { margin:0 14px; border-top:.5px solid var(--line); }
+.q { display:grid; grid-template-columns:30px minmax(0,1fr) 128px; gap:14px; padding:11px 0; border-bottom:1px solid var(--line); transition:background-color .6s; }
+.q:last-child { border-bottom:0; }
+.q-num { font:400 11px/1.5 var(--font-mono); color:var(--blue-light); }
+.q-text { font:400 12px/1.4 var(--font-sans); color:var(--ink-muted); }
+.q-ans { margin-top:4px; font:400 13px/1.42 var(--font-sans); color:var(--ink); transition:filter .3s; }
+.q-src { margin-top:5px; font:400 10px/1.3 var(--font-mono); color:var(--ink-subtle); }
+.q-meta { display:flex; flex-direction:column; align-items:flex-end; gap:7px; }
+.q.glow { background:rgba(22,128,79,.16); }
+
+.pill { display:inline-block; padding:4px 7px; border-radius:5px; border:1px solid; font:500 10.5px/1 var(--font-sans); white-space:nowrap; transition:background-color .35s, color .35s, border-color .35s; }
+.pill.S { color:var(--st-S); border-color:rgba(62,191,128,.55); background:rgba(62,191,128,.12); }
+.pill.M { color:var(--st-M); border-color:rgba(234,217,76,.5); background:rgba(234,217,76,.1); }
+.pill.D { color:var(--st-D); border-color:rgba(242,163,59,.55); background:rgba(242,163,59,.11); }
+.pill.F { color:var(--ink); border-color:var(--st-F); background:var(--st-F); }
+.conf { display:flex; align-items:center; gap:6px; font:400 10.5px/1 var(--font-mono); color:var(--blue-light); font-variant-numeric:tabular-nums; }
+.conf i { display:block; width:38px; height:3px; border-radius:2px; background:var(--line); position:relative; overflow:hidden; }
+.conf i::after { content:""; position:absolute; inset:0 auto 0 0; width:calc(var(--v) * 100%); background:var(--blue-light); }
+.discuss { display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border-radius:5px; border:1px solid var(--line-strong); background:var(--surface); font:500 11px/1 var(--font-display); color:var(--ink); cursor:pointer; opacity:0; transition:opacity .2s, transform .12s; }
+.discuss svg { width:11px; height:11px; }
+.q:hover .discuss, .q.hover .discuss, .discuss:focus-visible { opacity:1; }
+
+/* ---------- Conversation drawer (paper: the system's one light surface) ---------- */
+.scrim { position:absolute; inset:0; background:rgba(8,14,26,.55); opacity:0; pointer-events:none; transition:opacity .35s; z-index:20; }
+.scrim.open { opacity:1; }
+.drawer { position:absolute; top:12px; bottom:12px; right:12px; width:392px; z-index:21; display:flex; flex-direction:column; overflow:hidden; border-radius:8px; background:var(--paper); color:var(--paper-ink); transform:translateX(430px); transition:transform .45s cubic-bezier(.2,.8,.2,1); }
+.drawer.open { transform:none; }
+.d-head { padding:16px 18px 12px; border-bottom:1px solid var(--paper-line); }
+.d-eyebrow { font:400 10.5px/1.2 var(--font-mono); letter-spacing:.18em; text-transform:uppercase; color:var(--paper-ink-muted); }
+.d-q { margin-top:7px; font:500 15px/1.3 var(--font-display); text-wrap:balance; }
+.d-ans { margin-top:12px; padding:10px 12px; border-radius:6px; background:var(--paper-raised); border:1px solid var(--paper-line); }
+.d-ans .label { color:var(--paper-ink-muted); }
+.d-ans-text { margin-top:6px; font:400 12.5px/1.45 var(--font-sans); color:var(--paper-ink-muted); transition:color .4s; }
+.d-ans.final .d-ans-text { color:var(--paper-ink); }
+.d-meta { margin-top:9px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.drawer .pill.S { color:var(--pp-S); border-color:rgba(23,115,74,.4); background:rgba(23,115,74,.07); }
+.drawer .pill.M { color:var(--pp-M); border-color:rgba(122,100,0,.4); background:rgba(234,217,76,.18); }
+.drawer .pill.D { color:var(--pp-D); border-color:rgba(154,86,0,.4); background:rgba(242,163,59,.12); }
+.drawer .pill.F { color:#fff; }
+.drawer .conf { color:var(--paper-blue); }
+.drawer .conf i { background:var(--paper-line); }
+.drawer .conf i::after { background:var(--paper-blue); }
+.d-src { font:400 10px/1.3 var(--font-mono); color:var(--paper-ink-muted); }
+.convo { flex:1; min-height:0; overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:10px; }
+.msg { max-width:88%; padding:9px 12px; border-radius:6px; font:400 12.5px/1.45 var(--font-sans); animation:min .3s ease-out; }
+.msg.agent { align-self:flex-start; background:var(--paper-tint); color:var(--paper-ink); }
+.msg.me { align-self:flex-end; background:var(--paper-ink); color:var(--ink); }
+@keyframes min { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.dots { display:inline-flex; gap:4px; padding:3px 0; }
+.dots i { width:5px; height:5px; border-radius:50%; background:var(--paper-ink-muted); animation:blink 1s infinite; }
+.dots i:nth-child(2) { animation-delay:.15s; } .dots i:nth-child(3) { animation-delay:.3s; }
+@keyframes blink { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+.proposal { padding:10px 12px; border-radius:6px; background:var(--paper-raised); border:1px solid var(--paper-line); animation:min .3s ease-out; }
+.proposal .label { color:var(--paper-blue); }
+.p-text { margin-top:6px; font:400 12.5px/1.5 var(--font-sans); color:var(--paper-ink); }
+mark { background:var(--paper-tint); color:inherit; box-shadow:inset 0 -1.5px 0 var(--paper-blue); padding:0 1px; }
+.p-actions { margin-top:10px; display:flex; gap:8px; opacity:0; transition:opacity .3s; }
+.p-actions.show { opacity:1; }
+.b-approve { padding:8px 13px; border:0; border-radius:5px; background:var(--green); color:var(--on-green); font:500 12px/1 var(--font-display); cursor:pointer; transition:transform .12s; }
+.b-more { padding:8px 13px; border-radius:5px; border:1px solid #c9cfdb; background:var(--paper-raised); color:var(--paper-ink); font:500 12px/1 var(--font-display); }
+.d-input { display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--paper-line); }
+.inp { flex:1; min-width:0; min-height:36px; box-sizing:border-box; padding:9px 11px; border-radius:6px; border:1px solid #d6dbe6; background:var(--paper-raised); font:400 12.5px/1.4 var(--font-sans); color:var(--paper-ink); transition:border-color .2s, box-shadow .2s; }
+.inp.focus { border-color:var(--paper-blue); box-shadow:0 0 0 2px rgba(35,87,222,.14); }
+.inp .ph { color:var(--paper-ink-muted); }
+.caret { display:inline-block; width:1px; height:14px; margin-left:1px; vertical-align:-2px; background:var(--paper-ink); animation:cb 1s steps(1) infinite; }
+@keyframes cb { 50% { opacity:0; } }
+.send { flex:none; width:36px; height:36px; border:0; border-radius:5px; background:var(--paper-blue); color:#fff; display:grid; place-items:center; cursor:pointer; transition:transform .12s; }
+.send svg { width:14px; height:14px; }
+
+/* ---------- Scripted cursor ---------- */
+.cursor { position:absolute; left:0; top:0; z-index:50; pointer-events:none; opacity:0; transition:opacity .3s; will-change:transform; }
+.cursor svg { display:block; width:17px; height:21px; filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.ripple { position:absolute; z-index:49; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%; border:2px solid var(--blue-light); pointer-events:none; animation:rip .5s ease-out forwards; }
+@keyframes rip { from { transform:scale(.3); opacity:1; } to { transform:scale(1.4); opacity:0; } }
+
+/* Controls: a pill with the keys that deflates into a circle; hover or focus opens it again. Hidden when recording. */
+.hint { position:fixed; right:max(16px, env(safe-area-inset-right, 0px)); bottom:16px; z-index:100; display:flex; align-items:center; gap:8px; height:32px; max-width:320px; box-sizing:border-box; padding:0 14px 0 5px; overflow:hidden; white-space:nowrap; border-radius:16px; background:var(--surface); border:.5px solid var(--line-strong); color:var(--ink-muted); font:400 11px/1 var(--font-mono); cursor:pointer; transition:max-width .45s cubic-bezier(.2,.7,.2,1), padding .45s cubic-bezier(.2,.7,.2,1); }
+.hint-icon { flex:none; width:21px; text-align:center; font-size:15px; line-height:1; font-variant-emoji:text; color:var(--ink); }
+.hint .keys { transition:opacity .25s; }
+.hint .keys b { font-weight:400; color:var(--ink); }
+.hint.mini { max-width:32px; padding:0 0 0 5px; }
+.hint.mini .keys { opacity:0; }
+.hint.mini:hover, .hint.mini:focus-visible { max-width:320px; padding:0 14px 0 5px; }
+.hint.mini:hover .keys, .hint.mini:focus-visible .keys { opacity:1; }
+.hint:focus-visible { outline:2px solid var(--blue-light); outline-offset:2px; }
+body.rec .hint { display:none; }
+</style>
+
+<div class="viewport" id="viewport">
+<div class="stage" id="stage">
+
+  <aside class="rail">
+    <div class="brand">GroundControl<span>LIFTOFF DEMO</span></div>
+    <nav class="steps" id="steps" aria-label="Screencasts"></nav>
+    <div class="co">
+      <div class="label">Company</div>
+      <div class="co-name"><span class="hush">Lintel</span></div>
+      <div class="co-desc">Site records for construction subcontractors. Pre-seed, UK.</div>
+    </div>
+    <div class="foot">Demo run. Names and numbers blurred.</div>
+  </aside>
+
+  <main class="main">
+    <div class="scroll" id="scroller">
+      <header class="head">
+        <div>
+          <div class="eyebrow">Liftoff · Intake</div>
+          <h1>Intake questionnaire.</h1>
+          <p class="sub">47 questions in nine chapters. <b id="answered">0</b> answered.</p>
+        </div>
+        <button class="btn-go" id="btnGo" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6M2.5 10.5v3h11v-3"/></svg>
+          <span id="btnGoLabel">Pre-populate this form from your own documents</span>
+        </button>
+      </header>
+
+      <section class="panel fold" id="panel" aria-live="polite">
+        <div><div class="panel-in">
+          <div class="files" id="files"></div>
+          <div class="fold open" id="tickerFold"><div><div class="ticker" id="ticker"></div></div></div>
+          <div class="fold" id="summaryFold"><div><div class="summary">
+            <div class="stats">
+              <div class="stat"><div class="stat-num"><span id="pS">0</span>%</div><div class="stat-lbl"><span class="dot" style="background:var(--st-S)"></span><span>Sourced: taken from your documents</span></div></div>
+              <div class="stat"><div class="stat-num"><span id="pM">0</span>%</div><div class="stat-lbl"><span class="dot" style="background:var(--st-M)"></span><span>Material-inferred: assumed from them</span></div></div>
+              <div class="stat"><div class="stat-num"><span id="pD">0</span>%</div><div class="stat-lbl"><span class="dot" style="background:var(--st-D)"></span><span>Domain-inferred: usual for a business like yours</span></div></div>
+            </div>
+            <div class="callout"><span>Every field is pre-filled and tagged with a confidence score. Your form is ready for the interview.</span><small>Open a chapter to review</small></div>
+          </div></div></div>
+        </div></div>
+      </section>
+
+      <div class="list-head">
+        <span class="label">Chapters</span>
+        <button class="linkbtn" id="expandAll" type="button">Expand all</button>
+      </div>
+      <div class="chapters" id="chapters"></div>
+    </div>
+
+    <div class="scrim" id="scrim"></div>
+    <aside class="drawer" id="drawer" aria-label="Conversation about one answer">
+      <div class="d-head">
+        <div class="d-eyebrow" id="dEyebrow"></div>
+        <div class="d-q" id="dQ"></div>
+        <div class="fold open" id="dAnsFold"><div><div class="d-ans" id="dAns">
+          <div class="label" id="dAnsLabel">Pre-filled answer</div>
+          <div class="d-ans-text" id="dAnsText"></div>
+          <div class="d-meta" id="dMeta"></div>
+        </div></div></div>
+      </div>
+      <div class="convo" id="convo"></div>
+      <div class="d-input">
+        <div class="inp" id="inp"><span class="ph">Tell us what is different…</span></div>
+        <button class="send" id="send" type="button" aria-label="Send">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8h10M8.5 4l4 4-4 4"/></svg>
+        </button>
+      </div>
+    </aside>
+  </main>
+
+  <div class="cursor" id="cursor" aria-hidden="true">
+    <svg viewBox="0 0 17 21"><path d="M1.2 1.2v15.6l4.3-3.9 2.9 6.6 2.6-1.1-2.9-6.5h5.9z" fill="#fff" stroke="#0e192b" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+</div>
+
+<button class="hint" id="hint" type="button" aria-label="Play or pause"><span class="hint-icon" aria-hidden="true">⏯&#xFE0E;</span><span class="keys"><b>[Space]</b> play/pause, <b>[B]</b>lur</span></button>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- Data: Liftoff questionnaire (47 questions, in its own order), answers reconstructed for the sample company ----------
+   Origins: S sourced · M material-inferred · D domain-inferred · F founder-written.  [[...]] = blurred name or number. */
+const CH = [
+ { t:"Your goals", q:[
+  ["What does success look like for you at the end of the 12 weeks?","S",94,"business_plan.doc · Milestones","[[Three]] M&E subcontractors on [[12-month]] contracts at full price, up from pilot pricing, and one written case study with a recovered sum the customer approves."],
+  ["What does success look like in 12 months?","S",91,"business_plan.doc · Targets","By [[November 2027]], [[40]] paying subcontractors at about [[four]] sites each, near [[£24k]] monthly recurring revenue. Seed closed, first salesperson hired."],
+  ["Are you bootstrapping, raising money, or both? If you are raising, how much and by when?","S",96,"business_plan.doc · Funding","Raised [[£350k]] pre-seed in [[March 2026]] from [[four]] angels. Raising a [[£1.2M]] seed from [[April 2027]], to close by [[June 2027]]."],
+  ["What are the biggest obstacles between you and those goals?","M",72,"business_plan.doc · Risks; comments.txt","Ranked: only the CEO sells, part-time; foremen's use drops after the first weeks; managing directors stall approval; one strong result, not yet a pattern."],
+  ["What happens if you don't reach your goal?","M",68,"business_plan.doc · Cash plan","Burn about [[£20k]] a month, so cash runs out in [[August 2027]]. Without full-price customers by spring the seed does not close: a bridge from the angels, or shutting down."],
+  ["What strengths can we build on? For example, relationships, a product advantage, expertise or a well-known customer.","S",88,"linkedin_export · Profile","The CEO's [[11]] years in M&E commercial roles and a network of about [[200]] commercial people in the North West; a known pilot customer, [[Harrow & Finch]]; nothing to install, it runs in WhatsApp."]
+ ]},
+ { t:"Your company and team", q:[
+  ["What does the company do, in one sentence a buyer would understand?","S",97,"site_export.md · Home","[[Lintel]] turns site voice notes and photos into the records subcontractors need to get paid for extra work."],
+  ["Who are the founders, and what has each of you sold or built before? Please add LinkedIn links.","S",95,"linkedin_export · Profiles","[[Dara Whelan]], CEO: [[11]] years as quantity surveyor, then commercial manager, at an M&E firm. [[Priya Natarajan]], CTO: [[8]] years building claims tools at an insurer."],
+  ["How big is the team today, and who can sell or take customer calls?","M",74,"site_export.md · About; business_plan.doc","[[Four]] people. Only the CEO sells and runs every demo; a former foreman joins onboarding; two people build."],
+  ["Which parts of the commercial work take up most of your time today?","D",52,"Domain assumption · founder-led B2B sales","Prospect research, LinkedIn messages and posts, follow-ups after demos, and chasing pilots that have gone quiet: about [[15]] hours a week."]
+ ]},
+ { t:"Your product", q:[
+  ["What does the product do today? What can a buyer use right now?","S",96,"site_export.md · Product","A WhatsApp number per site for foremen's voice notes and photos; a daily site diary each evening; variation flags naming the likely contract clause and notice deadline; a weekly summary to the commercial manager."],
+  ["Is there a demo link, video or trial account we can use?","S",93,"site_export.md · Demo","A [[four-minute]] video and a sandbox site with [[three]] weeks of sample notes, diaries and flags."],
+  ["What doesn't it do yet, and what is on the roadmap for the next six months?","S",89,"business_plan.doc · Roadmap","No link to commercial or accounting systems, no drafted notice letters, English only. Next: an evidence pack export, one commercial-system integration, Polish and Romanian voice notes."],
+  ["What problem does it solve, and what do people use instead today?","S",92,"site_export.md · Why","Extra work done on verbal site instructions goes unpaid when nobody records it in time or the notice deadline passes. Today: paper diaries, unsearchable WhatsApp groups, spreadsheets, memory."],
+  ["What can your product do that the alternatives can't?","M",77,"site_export.md; business_plan.doc · Competition","Nothing new for foremen to learn; it reads notes against the contract's notice clauses and warns before a deadline passes. Paper and platforms only store what someone wrote."],
+  ["What result can a buyer expect, and how quickly?","S",90,"site_export.md · Case study","The first variation is flagged in week one; money shows at the next monthly payment application. One customer recovered [[£38k]] on one package in [[three]] months."]
+ ]},
+ { t:"Customers so far", q:[
+  ["Who has used the product, paid for it, piloted it or seriously talked to you about it?","S",91,"business_plan.doc · Traction","[[Six]] paying at pilot prices, about [[£1,500]] monthly recurring revenue: [[four]] M&E firms, one drylining, one fire protection. None at full price yet; [[two]] pilots ended; about [[25]] serious conversations."],
+  ["For each of them, what made them say yes, or what stopped them?","M",71,"comments.txt · Call notes","Yes: a commercial manager who just lost money on a disputed variation; no training for foremen. No: per-site pricing, site data in WhatsApp, foremen who stop after two weeks."],
+  ["Do you have recordings or notes from customer calls we can read?","S",86,"comments.txt","Notes from [[nine]] calls; [[three]] recorded calls, one with the best-known pilot customer."],
+  ["Do you have any quotes, numbers or results we can use? Please say which ones we have permission to share.","S",88,"site_export.md · Testimonial","[[£38k]] recovered, shareable anonymised. [[Sam Okafor]]: \"First time our diaries were done every single day.\" Shareable with name."],
+  ["Who has said no or gone quiet, and why do you think that happened?","M",66,"comments.txt · Call notes","A large main contractor wanted it inside its own platform; [[two]] groundworks pilots ended when foremen stopped; one fit-out firm went quiet after the price."]
+ ]},
+ { t:"Your market", q:[
+  ["Which types of company do you think need this most, and why?","M",70,"linkedin_export · Engagers; business_plan.doc","M&E subcontractors with [[20 to 250]] staff first; then drylining, fire protection, groundworks, scaffolding and social-housing repair contractors."],
+  ["In those companies, who feels the problem, who uses the product and who signs off the budget?","M",64,"comments.txt · Call notes","Feels: the commercial manager or quantity surveyor. Uses: foremen and site supervisors. Signs: the managing director."],
+  ["Is there a moment when a company suddenly needs this? For example, hiring, new funding, a new regulation, a merger or a product launch.","D",55,"Domain assumption · UK construction subcontracting","Losing a disputed variation or an adjudication; starting a large job on a contract with a strict time bar; a new commercial manager; a cash squeeze after late payment."],
+  ["Who are your competitors or alternatives, as your buyers see them?","S",87,"business_plan.doc · Competition","Paper diaries, spreadsheets and WhatsApp groups; big project platforms, seen as the main contractor's tools; claims consultants, hired after the money is at risk."],
+  ["Roughly how many companies fit your best segment, and where are they?","S",82,"business_plan.doc · Market","About [[4,000]] UK M&E subcontractors with [[20 to 249]] staff, mostly in London, the South East and the North West. The plan's own estimate, not yet sourced."],
+  ["Are there segments you have tried and dropped, or ones you want to avoid?","M",73,"business_plan.doc; comments.txt","Groundworks: [[two]] pilots dropped, foremen did not adopt. Main contractors above about [[£100M]] turnover avoided: they want their own platform."]
+ ]},
+ { t:"Price and what a buyer signs", q:[
+  ["What do you charge today, or plan to? How did you arrive at that price?","S",95,"site_export.md · Pricing","[[£149]] per active site per month, set below half a day of a quantity surveyor's time."],
+  ["What could a first deal look like: length, scope and price?","S",90,"business_plan.doc · Go to market","A [[three-month]] paid pilot on [[two]] sites for [[£250]] a month, converting to a [[12-month]] contract on all active sites at full price."],
+  ["What does the problem cost a buyer today, in time, money or risk?","S",80,"business_plan.doc · Problem","[[3 to 5%]] of contract value lost on unrecovered variations, plus about a day a week of quantity-surveyor time. The founder's estimate, not yet sourced."],
+  ["Which numbers is your buyer measured on, and who in the company owns them?","D",58,"Domain assumption · subcontractor finance","Gross margin per job, owned by the managing or commercial director; cash collection and payment applications, owned by the finance director or commercial manager."],
+  ["What would a buyer need to see or believe before they sign?","D",54,"Domain assumption · site-tool adoption","That foremen keep sending notes after the first month; that the records hold up when a claim is disputed; that site data is secure and stays theirs."]
+ ]},
+ { t:"How you sell today", q:[
+  ["What have you tried to win customers: outreach, events, ads, content, partners or referrals? What happened?","S",93,"marketing_report_2026_Q1-Q2.pdf · Channels; linkedin_export · Posts","LinkedIn posts: the most comments and inbound, [[two]] customers, nobody follows up the people who engage. Cold email: [[400]] sent, [[four]] replies, no customers. One trade show: one customer. Referrals: [[three]] customers."],
+  ["Where do your best leads come from today?","M",76,"marketing_report_2026_Q1-Q2.pdf; business_plan.doc","Referrals from the founder's network convert best; LinkedIn posts bring the most inbound."],
+  ["Which investors, advisers, partners or customers could introduce you to buyers?","D",50,"Domain assumption · B2B construction networks","Angels with a trade background, claims consultants who meet firms after a loss, champions at pilot customers, trade association contacts."],
+  ["Are there events, communities or associations where your buyers spend time?","D",56,"Domain assumption · UK building services","Trade association regional meetings, regional construction networking events, quantity-surveyor and commercial-manager groups on LinkedIn."],
+  ["Where do deals get stuck in your sales process today?","M",69,"comments.txt · Call notes","After a good demo with the commercial manager, the managing director's approval stalls for weeks; pilots stall when foremen stop sending notes in week two or three."]
+ ]},
+ { t:"Messaging, voice and brand", q:[
+  ["Do you have messaging, a pitch, a brand guide or a tone of voice written down? Please share it.","S",94,"business_plan.doc; site_export.md","A [[10-slide]] deck, written for investors and used with buyers too, and a [[three-page]] website. No brand or tone guide."],
+  ["How do you describe the company in a first conversation with a buyer?","S",85,"linkedin_export · Posts","\"How much extra work did you do last year that you never got paid for?\" Then the story of a variation lost for want of one diary entry."],
+  ["Can you share a few emails, posts or call recordings where you sound most like yourself?","S",92,"linkedin_export · Posts","About [[80]] LinkedIn posts since [[2025]], in the export. Short sentences, site language, dry humour, real numbers, no hype."],
+  ["Which words, claims or phrases should we always use, and which should we never use?","M",67,"linkedin_export · Posts","Say: get paid for the work you did, records, evidence, foremen, variations. Never: AI-powered, revolutionise, seamless, any promise to win a dispute."],
+  ["Are there companies whose messaging or design you like, or dislike?","D",45,"Domain assumption · founder voice","Likes plain, blunt brands that talk like a person; dislikes glossy construction-tech with drone footage and stock photos of hard hats."]
+ ]},
+ { t:"Time, budget and limits", q:[
+  ["How many hours a week can you and the team give this?","D",48,"Domain assumption · pre-seed team of four","CEO about [[12]] hours a week, the customer lead [[4]], the CTO [[2]]."],
+  ["What budget is there for data, ads, events or travel?","D",46,"Domain assumption · pre-seed B2B","About [[£1,500]] a month, mostly events and travel."],
+  ["Which tools do you already use: CRM, email, LinkedIn tools, data providers and AI tools?","M",78,"comments.txt; linkedin_export","HubSpot free plan as CRM, Google Workspace, LinkedIn Sales Navigator on trial, ChatGPT, Notion."],
+  ["Is there anything we must not do or say, or anyone we must not contact?","D",51,"Domain assumption · UK construction","No contact with a former employer's clients under a non-solicit; never name a customer without permission; no claims about winning disputes."],
+  ["Where are you least sure? What would you most like answered in the 12 weeks?","D",53,"Domain assumption · early adoption risk","Whether foremen keep using it beyond a pilot; which first segment is better; whether buyers pay per site or want a flat fee."]
+ ]}
+];
+const PILL = { S:"Sourced", M:"Material-inferred", D:"Domain-inferred", F:"Founder-written" };
+
+const FILES = [
+  ["linkedin_export_2026-11-12.csv","CSV","2.4 MB"],
+  ["marketing_report_2026_Q1-Q2.pdf","PDF","1.8 MB"],
+  ["site_export.md","MD","38 KB"],
+  ["business_plan.doc","DOC","1.1 MB"],
+  ["comments.txt","TXT","96 KB"]
+];
+const READING = [
+  "Reading linkedin_export_2026-11-12.csv · profile, posts, reactions, comments",
+  "Reading marketing_report_2026_Q1-Q2.pdf · channels, engagement, campaign results",
+  "Reading site_export.md · home, product, pricing, about",
+  "Reading business_plan.doc · ten sections",
+  "Reading comments.txt · notes from customer calls"
+];
+const CH_MSG = [
+  "Goals · milestones and funding dates from the plan; obstacles assumed from its risks",
+  "Team · founders matched to their LinkedIn profiles",
+  "Product · site checked against the roadmap: nothing promised that is not built",
+  "Customers · reasons for yes and no drawn from the call notes",
+  "Market · post engagers are mostly commercial managers at subcontractors",
+  "Price · pricing page agrees with the plan",
+  "Selling · LinkedIn posts bring the most inbound; cold email brought no customers",
+  "Voice · writing samples found in the posts",
+  "Limits · no figures in the material; assumptions for a pre-seed team of four"
+];
+
+/* The beat-2 conversation (question 5.2) */
+const TARGET = { c:4, i:1 };
+const FOUNDER = "No, that's not how it works for us. The commercial manager picks the tool; the MD only signs off above [[£10k]] a year.";
+const AGENT_OPEN = "I inferred this from your call notes, so I am only 64% sure. Tell me how it works at your company and I will rewrite it.";
+const AGENT_REPLY = "Understood: the commercial manager chooses the tool, and the managing director signs only above a threshold. Here is the answer, rewritten.";
+const NEW_ANSWER = "Feels: the commercial manager or quantity surveyor. Uses: foremen and site supervisors. {{Picks the tool: the commercial manager.}} Signs: the managing director, {{only for deals above}} [[£10k]] {{a year}}.";
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+/* A clock that stops while paused; every timer, frame loop and CSS animation follows it */
+let paused = false, pauseStart = 0, pausedTotal = 0, frozen = [];
+const now = () => (paused ? pauseStart : performance.now()) - pausedTotal;
+const sleep = ms => new Promise(res => { const end = now() + ms;
+  const tick = () => { const left = end - now(); if (left <= 0 && !paused) res(); else setTimeout(tick, paused ? 50 : Math.max(1, left)); };
+  tick(); });
+function setPaused(on) {
+  if (on === paused) return;
+  if (on) { paused = true; pauseStart = performance.now();
+    frozen = document.getAnimations().filter(a => a.playState === "running"); frozen.forEach(a => a.pause());
+    document.body.classList.add("blur-answers"); }      // paused: a still frame, so every blur on
+  else { pausedTotal += performance.now() - pauseStart; paused = false; frozen.forEach(a => a.play()); frozen = [];
+    document.body.classList.remove("blur-answers"); }   // playing again: names and numbers only
+}
+const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const rich = t => esc(t).replace(/\[\[(.+?)\]\]/g,'<span class="hush">$1</span>').replace(/\{\{(.+?)\}\}/g,'<mark>$1</mark>');
+const parts = t => t.split(/(\[\[.+?\]\]|\{\{.+?\}\})/).filter(Boolean).map(p =>
+  p.startsWith("[[") ? { t:p.slice(2,-2), k:"s" } : p.startsWith("{{") ? { t:p.slice(2,-2), k:"mark" } : { t:p, k:null });
+
+const stage = $("stage"), scroller = $("scroller"), cursor = $("cursor");
+const flags = new Set(location.hash.replace("#","").split("-").filter(Boolean));
+if (flags.has("rec")) document.body.classList.add("rec");
+if (flags.has("answers")) document.body.classList.add("blur-answers");
+
+/* ---------- fit the 960x540 stage to the window ---------- */
+let scale = 1;
+function fit() {
+  const vp = $("viewport"), W = vp.clientWidth, H = vp.clientHeight;
+  scale = Math.min(W / 960, H / 540);
+  stage.style.transform = `translate(${(W - 960*scale)/2}px, ${(H - 540*scale)/2}px) scale(${scale})`;
+}
+addEventListener("resize", fit); fit();
+
+/* ---------- render ---------- */
+const state = { answered:0, phase:"initial", running:false };
+const chev = '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5"/></svg>';
+const chat = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 2.5h9v6h-5l-2.5 2v-2h-1.5z"/></svg>';
+
+function qRow(c, i) {
+  const [text, o, conf, src, ans] = CH[c].q[i];
+  return `<div class="q" id="q-${c}-${i}">
+    <span class="q-num">${c+1}.${i+1}</span>
+    <div><div class="q-text">${esc(text)}</div><div class="q-ans">${rich(ans)}</div><div class="q-src">${esc(src)}</div></div>
+    <div class="q-meta"><span class="pill ${o}">${PILL[o]}</span><span class="conf"><i style="--v:${conf/100}"></i>${conf}%</span>
+      <button class="discuss" type="button" data-c="${c}" data-i="${i}">${chat}Discuss</button></div>
+  </div>`;
+}
+function render() {
+  $("chapters").innerHTML = CH.map((ch, c) => `
+    <div class="ch" id="ch-${c}">
+      <button class="ch-row" type="button" data-c="${c}" aria-expanded="false">
+        <span class="ch-num">${c+1}</span><span class="ch-title">${ch.t}</span>
+        <span class="bar">${ch.q.map((_, i) => `<span class="seg" id="seg-${c}-${i}"></span>`).join("")}</span>
+        <span class="ch-count"><b id="cnt-${c}">0</b> / ${ch.q.length}</span>${chev}
+      </button>
+      <div class="ch-body fold"><div><div class="qs">${ch.q.map((_, i) => qRow(c, i)).join("")}</div></div></div>
+    </div>`).join("");
+  $("files").innerHTML = FILES.map(([n, ext, size], k) => `
+    <div class="file" id="file-${k}"><span class="ficon">${ext}</span>
+      <div class="fmeta"><div class="fname">${n}</div><div class="fsize">${size}</div></div>
+      <span class="ring" id="ring-${k}"><svg class="arc" viewBox="0 0 20 20"><circle class="t" cx="10" cy="10" r="8" fill="none" stroke-width="2"/><circle class="p" cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg>
+      <span class="ok"><svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="#00131d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span></span>
+    </div>`).join("");
+}
+render();
+
+/* chapter open/close, by hand too once filled */
+function setOpen(c, open) {
+  const el = $("ch-" + c);
+  el.classList.toggle("open", open);
+  el.querySelector(".ch-body").classList.toggle("open", open);
+  el.querySelector(".ch-row").setAttribute("aria-expanded", open);
+}
+$("chapters").addEventListener("click", e => {
+  const row = e.target.closest(".ch-row");
+  if (row && !state.running) { const c = +row.dataset.c; if ($("ch-" + c).classList.contains("ready")) setOpen(c, !$("ch-" + c).classList.contains("open")); }
+});
+$("expandAll").addEventListener("click", () => { if (!state.running && state.phase !== "initial") CH.forEach((_, c) => setOpen(c, true)); });
+
+/* ---------- cursor ---------- */
+let cx = 560, cy = 470;
+function posOf(el, fx = .5, fy = .5) {
+  const sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return [(r.left - sr.left + r.width*fx) / scale, (r.top - sr.top + r.height*fy) / scale];
+}
+function placeCursor(x, y) { cx = x; cy = y; cursor.style.transition = "opacity .3s"; cursor.style.transform = `translate(${x}px,${y}px)`; }
+async function showCursor() { cursor.style.opacity = 1; await sleep(300); }
+async function moveTo(el, fx, fy, dur) {
+  const [x, y] = posOf(el, fx, fy), d = Math.hypot(x - cx, y - cy);
+  dur = dur ?? Math.min(1050, Math.max(420, d * 1.5));
+  cursor.style.transition = `opacity .3s, transform ${dur}ms cubic-bezier(.45,.05,.25,1)`;
+  cursor.style.transform = `translate(${x}px,${y}px)`;
+  cx = x; cy = y;
+  await sleep(dur + 80);
+}
+async function click(el) {
+  const r = document.createElement("span"); r.className = "ripple";
+  r.style.left = cx + 1 + "px"; r.style.top = cy + 1 + "px"; stage.appendChild(r);
+  setTimeout(() => r.remove(), 600);
+  el && el.classList.add("pressed"); await sleep(150); el && el.classList.remove("pressed"); await sleep(130);
+}
+function scrollToY(y, dur) {
+  y = Math.max(0, Math.min(y, scroller.scrollHeight - scroller.clientHeight));
+  return new Promise(res => {
+    const y0 = scroller.scrollTop, t0 = now();
+    const f = () => { const p = Math.min(1, (now() - t0) / dur), e = p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2;
+      scroller.scrollTop = y0 + (y - y0) * e; p < 1 ? requestAnimationFrame(f) : res(); };
+    requestAnimationFrame(f);
+  });
+}
+const offsetIn = el => (el.getBoundingClientRect().top - scroller.getBoundingClientRect().top) / scale + scroller.scrollTop;
+
+/* ---------- streaming text ---------- */
+function ticker(text) {
+  const t = $("ticker"), line = document.createElement("div");
+  line.className = "tl now"; line.innerHTML = rich(text);
+  [...t.children].forEach(n => n.classList.remove("now"));
+  t.appendChild(line);
+  const kids = [...t.children];
+  kids.forEach((n, k) => { n.classList.remove("old1", "old2"); const age = kids.length - 1 - k; if (age === 1) n.classList.add("old1"); if (age === 2) n.classList.add("old2"); });
+  while (t.children.length > 4) t.firstChild.remove();
+}
+function holder(parent, k) {
+  if (!k) return parent;
+  const el = document.createElement(k === "s" ? "span" : "mark");
+  if (k === "s") el.className = "hush";
+  parent.appendChild(el); return el;
+}
+async function streamWords(el, text, ms = 32) {
+  for (const p of parts(text)) {
+    const h = holder(el, p.k);
+    if (p.k === "s") { h.textContent = p.t; await sleep(ms); continue; }
+    for (const w of p.t.split(/(\s+)/)) { if (!w) continue; h.append(w); if (w.trim()) await sleep(ms); }
+  }
+}
+async function typeInto(el, text, ms = 34) {
+  el.innerHTML = ""; const caret = document.createElement("span"); caret.className = "caret";
+  for (const p of parts(text)) {
+    const h = holder(el, p.k); el.appendChild(caret);
+    for (const ch of p.t) { h.append(ch); await sleep(ch === " " ? ms * .6 : ms + (Math.random() * 22 - 8)); }
+  }
+  return caret;
+}
+function countUp(el, to, dur) {
+  const t0 = now();
+  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); p < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
+}
+function ring(k, dur) {
+  const c = $("ring-" + k).querySelector(".p"), L = 50.27, t0 = now();
+  return new Promise(res => { const f = () => { const p = Math.min(1, (now() - t0) / dur); c.style.strokeDashoffset = L * (1 - (1 - Math.pow(1 - p, 2)));
+    if (p < 1) requestAnimationFrame(f); else { $("ring-" + k).classList.add("done"); res(); } }; requestAnimationFrame(f); });
+}
+
+/* ---------- state changes ---------- */
+function shares() {
+  const n = { S:0, M:0, D:0 }, all = CH.flatMap(ch => ch.q);
+  all.forEach(q => { if (n[q[1]] !== undefined) n[q[1]]++; });
+  const tot = all.length, pS = Math.round(n.S / tot * 100), pM = Math.round(n.M / tot * 100);
+  return { pS, pM, pD: 100 - pS - pM };
+}
+function fillSeg(c, i, pop = true) {
+  const s = $(`seg-${c}-${i}`); s.className = "seg " + CH[c].q[i][1];
+  if (pop) { void s.offsetWidth; s.classList.add("pop"); }
+  state.answered++; $("answered").textContent = state.answered;
+  $("cnt-" + c).textContent = +$("cnt-" + c).textContent + 1;
+}
+function finishButton() { $("btnGo").classList.add("done"); $("btnGoLabel").textContent = `${FILES.length} documents read`; }
+function showSummaryInstant() {
+  const s = shares(); $("pS").textContent = s.pS; $("pM").textContent = s.pM; $("pD").textContent = s.pD;
+  $("tickerFold").classList.remove("open"); $("summaryFold").classList.add("open");
+}
+function fillInstant() {
+  $("panel").classList.add("open");
+  FILES.forEach((_, k) => { $("file-" + k).classList.add("in"); $("ring-" + k).classList.add("done"); $("ring-" + k).querySelector(".p").style.strokeDashoffset = 0; });
+  CH.forEach((ch, c) => { ch.q.forEach((_, i) => fillSeg(c, i, false)); $("ch-" + c).classList.add("ready"); });
+  finishButton(); showSummaryInstant(); $("expandAll").classList.add("show");
+  setOpen(0, true); state.phase = "b1done";
+}
+
+/* ---------- Beat 1: upload, fill, open a chapter ---------- */
+async function beat1() {
+  placeCursor(600, 470); await showCursor(); await sleep(350);
+  const btn = $("btnGo");
+  await moveTo(btn, .5, .55); await click(btn);
+  $("panel").classList.add("open"); await sleep(420);
+  ticker(`Uploading ${FILES.length} documents`);
+  const rings = [];
+  for (let k = 0; k < FILES.length; k++) { $("file-" + k).classList.add("in"); rings.push(ring(k, 1000 + k * 260)); await sleep(240); }
+  await moveTo(btn, .5, 2.4, 700);
+  await Promise.all(rings);
+  await sleep(250);
+  await scrollToY(offsetIn($("ticker")) - 6, 900);
+  for (const m of READING) { ticker(m); await sleep(520); }
+  for (let c = 0; c < CH.length; c++) {
+    ticker(`Chapter ${c+1} · ${CH_MSG[c]}`);
+    await sleep(240);
+    for (let i = 0; i < CH[c].q.length; i++) { fillSeg(c, i); await sleep(115); }
+    $("ch-" + c).classList.add("ready");
+    await sleep(260);
+  }
+  ticker("Every field filled · tagged by origin · confidence scored · sources linked");
+  finishButton(); await sleep(900);
+  await scrollToY(0, 800);
+  $("tickerFold").classList.remove("open"); $("summaryFold").classList.add("open");
+  const s = shares();
+  await Promise.all([countUp($("pS"), s.pS, 1100), countUp($("pM"), s.pM, 1100), countUp($("pD"), s.pD, 1100)]);
+  $("expandAll").classList.add("show");
+  await sleep(1500);
+  const row = $("ch-0").querySelector(".ch-row");
+  await scrollToY(offsetIn($("chapters")) - 70, 900);
+  await moveTo(row, .22, .5); await click(row);
+  setOpen(0, true); await sleep(500);
+  await moveTo(row, .7, 3.2, 900);
+  await sleep(1400);
+  state.phase = "b1done";
+}
+
+/* ---------- Beat 2: scroll, discuss one answer, approve ---------- */
+async function beat2() {
+  if (cursor.style.opacity !== "1") placeCursor(620, 470);
+  await showCursor();
+  const ea = $("expandAll");
+  await scrollToY(offsetIn($("chapters")) - 120, 700);
+  await moveTo(ea, .5, .6); await click(ea);
+  for (let c = 0; c < CH.length; c++) { if (!$("ch-" + c).classList.contains("open")) { setOpen(c, true); await sleep(70); } }
+  await sleep(700);
+  const row = $(`q-${TARGET.c}-${TARGET.i}`);
+  await moveTo(scroller, .62, .62, 500);
+  await scrollToY(offsetIn(row) - scroller.clientHeight * .38, 4600);
+  await sleep(300);
+  await moveTo(row, .6, .5); row.classList.add("hover"); await sleep(300);
+  const db = row.querySelector(".discuss");
+  await moveTo(db, .5, .55); await click(db);
+  await openDrawer();
+  row.classList.remove("hover");
+
+  const convo = $("convo"), inp = $("inp");
+  const a1 = document.createElement("div"); a1.className = "msg agent"; convo.appendChild(a1);
+  await streamWords(a1, AGENT_OPEN, 30);
+  await sleep(500);
+  await moveTo(inp, .35, .5); await click(null);
+  inp.classList.add("focus");
+  const caret = await typeInto(inp, FOUNDER, 36);
+  await sleep(350);
+  const send = $("send");
+  await moveTo(send); await click(send);
+  caret.remove();
+  const me = document.createElement("div"); me.className = "msg me"; me.innerHTML = rich(FOUNDER); convo.appendChild(me);
+  inp.innerHTML = '<span class="ph">Tell us what is different…</span>'; inp.classList.remove("focus");
+  $("dAnsFold").classList.remove("open");
+  await sleep(450);
+  const a2 = document.createElement("div"); a2.className = "msg agent"; a2.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>'; convo.appendChild(a2);
+  await sleep(1000); a2.innerHTML = "";
+  await streamWords(a2, AGENT_REPLY, 30);
+  const prop = document.createElement("div"); prop.className = "proposal";
+  prop.innerHTML = '<div class="label">Rewritten answer</div><div class="p-text"></div><div class="p-actions"><button class="b-approve" type="button">Approve</button><button class="b-more" type="button">Keep talking</button></div>';
+  convo.appendChild(prop); convo.scrollTop = convo.scrollHeight;
+  await streamWords(prop.querySelector(".p-text"), NEW_ANSWER, 38);
+  prop.querySelector(".p-actions").classList.add("show");
+  convo.scrollTop = convo.scrollHeight;
+  await sleep(1100);
+  const ap = prop.querySelector(".b-approve");
+  await moveTo(ap); await click(ap);
+
+  // approve: the answer becomes the founder's own
+  const q = CH[TARGET.c].q[TARGET.i];
+  q[1] = "F"; q[2] = 100; q[3] = "Founder, in conversation · approved"; q[4] = NEW_ANSWER.replace(/\{\{|\}\}/g, "");
+  prop.querySelector(".label").textContent = "Approved answer";
+  prop.querySelector(".p-actions").outerHTML = `<div class="d-meta">${metaHTML(q)}</div>`;
+  convo.scrollTop = convo.scrollHeight;
+  await sleep(1700);
+  await moveTo(scroller, .3, .85, 600);
+  closeDrawer(); await sleep(450);
+  row.outerHTML = qRow(TARGET.c, TARGET.i);
+  const nr = $(`q-${TARGET.c}-${TARGET.i}`); nr.classList.add("glow");
+  const seg = $(`seg-${TARGET.c}-${TARGET.i}`); seg.className = "seg F"; void seg.offsetWidth; seg.classList.add("pop");
+  await sleep(1600); nr.classList.remove("glow");
+  state.phase = "done";
+}
+
+const metaHTML = q => `<span class="pill ${q[1]}">${PILL[q[1]]}</span><span class="conf"><i style="--v:${q[2]/100}"></i>${q[2]}%</span><span class="d-src">${esc(q[3])}</span>`;
+function setDrawerMeta(q) { $("dMeta").innerHTML = metaHTML(q); }
+async function openDrawer() {
+  const q = CH[TARGET.c].q[TARGET.i];
+  $("dEyebrow").textContent = `Question ${TARGET.c+1}.${TARGET.i+1} · ${CH[TARGET.c].t}`;
+  $("dQ").textContent = q[0];
+  $("dAnsLabel").textContent = "Pre-filled answer";
+  $("dAnsText").innerHTML = rich(q[4]);
+  $("dAnsFold").classList.add("open");
+  setDrawerMeta(q);
+  $("convo").innerHTML = "";
+  $("scrim").classList.add("open"); $("drawer").classList.add("open");
+  await sleep(600);
+}
+function closeDrawer() { $("scrim").classList.remove("open"); $("drawer").classList.remove("open"); }
+
+/* ---------- screencast tabs: a click loads that screencast at its start, without playing ---------- */
+const PAGE = "intake.html";
+const STEPS = [
+  ["Intake", "intake.html", true],
+  ["Segments", "segments.html", true],
+  ["Voice clone", "voice-clone.html", false],
+  ["Posts to meetings", "posts-to-meetings.html", false]
+];
+$("steps").innerHTML = STEPS.map(([name, file, built], k) => built
+  ? `<a class="step${file === PAGE ? " on" : ""}" href="${file}"${file === PAGE ? ' aria-current="page"' : ""}><span class="n">${k+1}</span>${name}</a>`
+  : `<span class="step off" title="Not built yet"><span class="n">${k+1}</span>${name}</span>`).join("");
+$("steps").addEventListener("click", e => {
+  const a = e.target.closest("a.step"); if (!a) return;
+  e.preventDefault();
+  const file = a.getAttribute("href");
+  if (file === PAGE) { restart(); return; }
+  const keep = [...flags].filter(f => f !== "auto" && f !== "beat2").join("-");
+  location.href = file + (keep ? "#" + keep : "");
+});
+
+/* ---------- controls ---------- */
+async function play() {
+  if (state.running) { setPaused(!paused); return; }
+  if (state.phase === "done") return;
+  state.running = true; $("hint").classList.add("mini");
+  document.body.classList.remove("blur-answers");   // playing: only names and numbers blurred, so it reads as real
+  try {
+    if (state.phase === "initial") { await beat1(); await sleep(1200); }
+    if (state.phase === "b1done") await beat2();
+    cursor.style.opacity = 0;
+    document.body.classList.add("blur-answers");    // ended: every blur on, the still frame shows only shape
+  } finally { state.running = false; }
+}
+function restart(extra) {
+  const f = new Set(flags); f.delete("auto"); f.delete("beat2"); if (extra) f.add(extra);
+  location.hash = [...f].join("-"); location.reload();
+}
+addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); play(); }
+  else if (e.key === "1") restart();
+  else if (e.key === "2") restart("beat2");
+  else if (e.key === "b" || e.key === "B") { document.body.classList.toggle("blur-answers"); }
+});
+$("hint").addEventListener("click", play);
+setTimeout(() => $("hint").classList.add("mini"), 2500);
+$("btnGo").addEventListener("click", () => { if (state.phase === "initial") play(); });
+
+if (flags.has("beat2")) fillInstant();
+if (flags.has("auto")) setTimeout(play, 1500);
+})();
+</script>
