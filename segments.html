@@ -842,9 +842,8 @@ async function beatSort() {
   const sb = $("bSort");
   await moveTo(sb, .5, .55); await click(sb);
   $("menu").classList.add("open"); await sleep(700);
-  const items = [...$("menu").querySelectorAll(".mi")];
-  for (const m of items) { await moveTo(m, .4, .5, 170); m.classList.add("hover"); await sleep(120); if (m.id !== "miBh") m.classList.remove("hover"); else break; }
-  await sleep(350);
+  await moveTo($("miBh"), .4, .5, 650); $("miBh").classList.add("hover");
+  await sleep(250);
   await click($("miBh"));
   $("menu").classList.remove("open"); $("miBh").classList.remove("hover");
   setSort("bh", "Beachhead score");
